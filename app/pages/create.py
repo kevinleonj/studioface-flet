@@ -195,63 +195,113 @@ def build(page: ft.Page) -> list[ft.Control]:
     # FilePicker auto-registers as a Service — no overlay needed
 
     # --- Camera setup (flet-camera, web/iOS/Android only) ---
-    camera = None
+    # The Camera control MUST be in the page control tree before
+    # get_available_cameras() or initialize() can be called —
+    # those methods talk to the Flutter widget in the browser over WebSocket.
+    camera_preview = None
+    camera_container_ref = ft.Ref[ft.Container]()
+    camera_status_ref = ft.Ref[ft.Text]()
+    flip_btn_ref = ft.Ref[ft.OutlinedButton]()
+    capture_btn_ref = ft.Ref[ft.ElevatedButton]()
+
     if HAS_CAMERA:
-        camera = fc.Camera(
+        camera_preview = fc.Camera(
             preview_enabled=True,
             expand=True,
-            height=300,
-            width=400,
-            visible=False,
         )
 
     def on_camera_mode(e):
-        """Switch between file upload and camera mode."""
+        """Switch to camera mode. Camera must be visible BEFORE enumerating."""
+        import asyncio
+
         state["upload_mode"] = "camera"
         state["validation_error"] = None
         _rebuild_step()
-        if camera and not state["camera_ready"]:
-            async def init_cam():
-                try:
-                    cams = await camera.get_available_cameras()
-                    state["cameras"] = cams
-                    if cams:
-                        front = [c for c in cams if c.lens_direction == fc.CameraLensDirection.FRONT]
-                        initial = front[0] if front else cams[0]
-                        state["current_camera_idx"] = cams.index(initial)
-                        await camera.initialize(
-                            description=initial,
-                            resolution_preset=fc.ResolutionPreset.HIGH,
-                        )
-                        state["camera_ready"] = True
-                        camera.visible = True
-                        page.update()
-                except Exception:
-                    state["upload_mode"] = "files"
+
+        if not camera_preview or state["camera_ready"]:
+            return
+
+        async def init_cam():
+            try:
+                # Step 1: Make camera visible + update page so browser renders it
+                camera_preview.visible = True
+                if camera_container_ref.current:
+                    camera_container_ref.current.visible = True
+                if camera_status_ref.current:
+                    camera_status_ref.current.value = t("create.camera_initializing", lang)
+                    camera_status_ref.current.visible = True
+                page.update()
+
+                # Step 2: Wait for the Flutter widget to mount in the browser
+                await asyncio.sleep(1.0)
+
+                # Step 3: NOW enumerate cameras (talks to browser over WS)
+                cams = await camera_preview.get_available_cameras()
+                print(f"[CAMERA] Found {len(cams)} cameras: {[c.name for c in cams]}", flush=True)
+                state["cameras"] = cams
+
+                if not cams:
+                    state["camera_ready"] = False
                     state["validation_error"] = t("create.camera_not_available", lang)
+                    camera_preview.visible = False
+                    if camera_status_ref.current:
+                        camera_status_ref.current.visible = False
                     _rebuild_step()
-            page.run_task(init_cam)
+                    return
+
+                # Step 4: Initialize with front camera (for selfies)
+                front = [c for c in cams if c.lens_direction == fc.CameraLensDirection.FRONT]
+                initial = front[0] if front else cams[0]
+                state["current_camera_idx"] = cams.index(initial)
+
+                await camera_preview.initialize(
+                    description=initial,
+                    resolution_preset=fc.ResolutionPreset.HIGH,
+                )
+                print(f"[CAMERA] Initialized: {initial.name}", flush=True)
+
+                state["camera_ready"] = True
+                if camera_status_ref.current:
+                    camera_status_ref.current.visible = False
+                if flip_btn_ref.current:
+                    flip_btn_ref.current.visible = len(cams) > 1
+                if capture_btn_ref.current:
+                    capture_btn_ref.current.disabled = False
+                page.update()
+
+            except Exception as ex:
+                print(f"[CAMERA ERROR] {ex}", flush=True)
+                state["upload_mode"] = "files"
+                state["camera_ready"] = False
+                state["validation_error"] = t("create.camera_not_available", lang)
+                if camera_preview:
+                    camera_preview.visible = False
+                _rebuild_step()
+
+        page.run_task(init_cam)
 
     def on_files_mode(e):
         """Switch back to file upload mode."""
         state["upload_mode"] = "files"
         state["validation_error"] = None
-        if camera:
-            camera.visible = False
+        if camera_preview:
+            camera_preview.visible = False
         _rebuild_step()
 
     def on_flip_camera(e):
         """Switch between front and back camera."""
         if not state["cameras"] or len(state["cameras"]) < 2:
             return
+
         async def do_flip():
             idx = (state["current_camera_idx"] + 1) % len(state["cameras"])
             state["current_camera_idx"] = idx
-            await camera.initialize(
+            await camera_preview.initialize(
                 description=state["cameras"][idx],
                 resolution_preset=fc.ResolutionPreset.HIGH,
             )
             page.update()
+
         page.run_task(do_flip)
 
     def on_capture(e):
@@ -260,9 +310,11 @@ def build(page: ft.Page) -> list[ft.Control]:
             state["validation_error"] = t("create.max_photos", lang)
             _rebuild_step()
             return
+
         async def do_capture():
             try:
-                image_bytes = await camera.take_picture()
+                image_bytes = await camera_preview.take_picture()
+                print(f"[CAMERA] Captured {len(image_bytes) if image_bytes else 0} bytes", flush=True)
                 if image_bytes:
                     idx = len(state["selected_files"]) + 1
                     state["selected_files"].append({
@@ -272,9 +324,11 @@ def build(page: ft.Page) -> list[ft.Control]:
                     })
                     state["validation_error"] = None
                     _rebuild_step()
-            except Exception:
+            except Exception as ex:
+                print(f"[CAMERA CAPTURE ERROR] {ex}", flush=True)
                 state["validation_error"] = t("error.upload_failed", lang)
                 _rebuild_step()
+
         page.run_task(do_capture)
 
     # --- Navigation handlers ---
@@ -514,59 +568,68 @@ def build(page: ft.Page) -> list[ft.Control]:
             visible=(upload_mode == "files"),
         )
 
-        # --- Camera zone (shown when mode == "camera") ---
+        # --- Camera zone ---
+        # The Camera control MUST be in the control tree always (even hidden)
+        # so it renders in the browser before we can call get_available_cameras().
         camera_zone_controls: list[ft.Control] = []
-        if HAS_CAMERA and upload_mode == "camera":
-            if state["camera_ready"] and camera:
-                camera_zone_controls = [
-                    ft.Container(
-                        content=camera,
-                        width=min(400, page_width - 2 * h_pad),
-                        height=300,
-                        border_radius=T.RADIUS_MD,
-                        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-                        bgcolor=T.BG_SURFACE_HIGH,
-                    ),
-                    ft.Row(
-                        controls=[
-                            ft.OutlinedButton(
-                                t("create.flip_camera", lang),
-                                icon=ft.Icons.FLIP_CAMERA_ANDROID,
-                                style=ft.ButtonStyle(
-                                    color=T.TEXT_SECONDARY,
-                                    side=ft.BorderSide(1, T.OUTLINE),
-                                    shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
-                                ),
-                                on_click=on_flip_camera,
-                                visible=len(state["cameras"]) > 1,
+        if HAS_CAMERA and camera_preview:
+            camera_zone_controls = [
+                # Camera preview — always in tree, visibility controlled by camera_preview.visible
+                ft.Container(
+                    ref=camera_container_ref,
+                    content=camera_preview,
+                    width=min(400, page_width - 2 * h_pad),
+                    height=300,
+                    border_radius=T.RADIUS_MD,
+                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                    bgcolor=T.BG_SURFACE_HIGH,
+                    visible=state["camera_ready"],
+                ),
+                # Status text (shown while initializing)
+                ft.Text(
+                    ref=camera_status_ref,
+                    value=t("create.camera_initializing", lang),
+                    size=T.FONT_BODY,
+                    color=T.TEXT_SECONDARY,
+                    visible=(upload_mode == "camera" and not state["camera_ready"]),
+                ),
+                # Camera action buttons
+                ft.Row(
+                    controls=[
+                        ft.OutlinedButton(
+                            t("create.flip_camera", lang),
+                            ref=flip_btn_ref,
+                            icon=ft.Icons.FLIP_CAMERA_ANDROID,
+                            style=ft.ButtonStyle(
+                                color=T.TEXT_SECONDARY,
+                                side=ft.BorderSide(1, T.OUTLINE),
+                                shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
                             ),
-                            ft.ElevatedButton(
-                                t("create.capture", lang),
-                                icon=ft.Icons.CAMERA,
-                                bgcolor=T.BUTTON_PRIMARY_BG,
-                                color=T.BUTTON_TEXT,
-                                style=ft.ButtonStyle(
-                                    shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
-                                    padding=ft.padding.symmetric(
-                                        horizontal=T.SPACE_LG, vertical=T.SPACE_MD
-                                    ),
+                            on_click=on_flip_camera,
+                            visible=(state["camera_ready"] and len(state["cameras"]) > 1),
+                        ),
+                        ft.ElevatedButton(
+                            t("create.capture", lang),
+                            ref=capture_btn_ref,
+                            icon=ft.Icons.CAMERA,
+                            bgcolor=T.BUTTON_PRIMARY_BG,
+                            color=T.BUTTON_TEXT,
+                            style=ft.ButtonStyle(
+                                shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
+                                padding=ft.padding.symmetric(
+                                    horizontal=T.SPACE_LG, vertical=T.SPACE_MD
                                 ),
-                                on_click=on_capture,
                             ),
-                        ],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        spacing=T.SPACE_MD,
-                    ),
-                ]
-            else:
-                camera_zone_controls = [
-                    ft.ProgressRing(width=32, height=32, color=T.PRIMARY),
-                    ft.Text(
-                        t("create.camera_initializing", lang),
-                        size=T.FONT_BODY,
-                        color=T.TEXT_SECONDARY,
-                    ),
-                ]
+                            on_click=on_capture,
+                            disabled=(not state["camera_ready"]),
+                            visible=state["camera_ready"],
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=T.SPACE_MD,
+                    visible=state["camera_ready"],
+                ),
+            ]
 
         camera_zone = ft.Container(
             content=ft.Column(
