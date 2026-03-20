@@ -40,20 +40,29 @@ def main(page: ft.Page):
             page.controls.clear()
             page.scroll = ft.ScrollMode.AUTO
 
-            if route == "/" or route == "":
+            # Strip query params for route matching
+            route_path = route.split("?")[0] if "?" in route else route
+
+            if route_path == "/" or route_path == "":
                 from app.pages.landing import build
                 page.controls.extend(build(page))
-            elif route == "/login":
+            elif route_path == "/login":
                 from app.pages.login import build
                 page.controls.extend(build(page))
-            elif route == "/create":
+            elif route_path.startswith("/auth/callback"):
+                from app.pages.auth_callback import build
+                page.controls.extend(build(page))
+            elif route_path == "/create":
                 from app.pages.create import build
                 page.controls.extend(build(page))
-            elif route.startswith("/gallery"):
+            elif route_path.startswith("/gallery"):
                 from app.pages.gallery import build
                 page.controls.extend(build(page))
-            elif route == "/payment/success":
+            elif route_path == "/payment/success":
                 from app.pages.payment_success import build
+                page.controls.extend(build(page))
+            elif route_path == "/payment/cancel":
+                from app.pages.payment_cancel import build
                 page.controls.extend(build(page))
             else:
                 from app.pages.not_found import build

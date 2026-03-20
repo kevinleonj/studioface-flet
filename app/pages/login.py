@@ -1,4 +1,4 @@
-"""StudioFace Login Page — Dark premium design with gold accent."""
+"""StudioFace Login Page — Dark premium design with gold accent and real API calls."""
 
 import re
 
@@ -20,12 +20,19 @@ def build(page: ft.Page) -> list[ft.Control]:
     page_width = page.width or 800
     is_mobile = page_width < T.MOBILE_MAX
 
+    # If already authenticated, redirect to /create
+    user = page.session.store.get("user")
+    if user:
+        page.go("/create")
+        return []
+
     # Refs for dynamic elements
     email_field_ref = ft.Ref[ft.TextField]()
     send_button_ref = ft.Ref[ft.ElevatedButton]()
     error_banner_ref = ft.Ref[ft.Container]()
     success_banner_ref = ft.Ref[ft.Container]()
     form_column_ref = ft.Ref[ft.Column]()
+    error_text_ref = ft.Ref[ft.Text]()
 
     def _validate_email(email: str) -> bool:
         return bool(_EMAIL_RE.match(email.strip()))
@@ -52,26 +59,106 @@ def build(page: ft.Page) -> list[ft.Control]:
             return
 
         email_field.error_text = None
-        send_button.disabled = True
-        page.update()
 
-        if success_banner:
-            success_banner.visible = True
+        # Disable button and show loading
+        send_button.disabled = True
+        send_button.content = ft.Row(
+            controls=[
+                ft.ProgressRing(width=16, height=16, stroke_width=2, color=T.BUTTON_TEXT),
+                ft.Text(
+                    t("common.loading", lang),
+                    size=T.FONT_BODY,
+                    weight=ft.FontWeight.W_600,
+                    color=T.BUTTON_TEXT,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=T.SPACE_SM,
+        )
         if error_banner:
             error_banner.visible = False
-        if form_column_ref.current:
-            form_column_ref.current.visible = False
-
-        send_button.disabled = False
         page.update()
+
+        async def do_send():
+            api = page.session.store.get("api")
+            if not api:
+                send_button.disabled = False
+                send_button.content = ft.Text(
+                    t("auth.send_magic_link", lang),
+                    size=T.FONT_BODY,
+                    weight=ft.FontWeight.W_600,
+                    color=T.BUTTON_TEXT,
+                )
+                if error_banner:
+                    error_text = error_text_ref.current
+                    if error_text:
+                        error_text.value = t("error.generic", lang)
+                    error_banner.visible = True
+                page.update()
+                return
+
+            result = await api.send_magic_link(email, lang)
+
+            # Restore button
+            send_button.disabled = False
+            send_button.content = ft.Text(
+                t("auth.send_magic_link", lang),
+                size=T.FONT_BODY,
+                weight=ft.FontWeight.W_600,
+                color=T.BUTTON_TEXT,
+            )
+
+            if "error" not in result:
+                # Success — show check email message
+                if success_banner:
+                    success_banner.visible = True
+                if form_column_ref.current:
+                    form_column_ref.current.visible = False
+                if error_banner:
+                    error_banner.visible = False
+            else:
+                # Error — show error banner
+                if error_banner:
+                    error_text = error_text_ref.current
+                    if error_text:
+                        error_text.value = result.get("error", t("error.generic", lang))
+                    error_banner.visible = True
+            page.update()
+
+        page.run_task(do_send)
 
     def on_microsoft_login(e):
         microsoft_button = microsoft_button_ref.current
-        if microsoft_button:
-            microsoft_button.disabled = True
-            page.update()
-            microsoft_button.disabled = False
+        if not microsoft_button:
+            return
+
+        microsoft_button.disabled = True
         page.update()
+
+        async def do_microsoft():
+            api = page.session.store.get("api")
+            if not api:
+                microsoft_button.disabled = False
+                page.update()
+                return
+
+            result = await api.get_microsoft_auth_url()
+            microsoft_button.disabled = False
+
+            if "error" not in result:
+                auth_url = result.get("auth_url", "")
+                if auth_url:
+                    page.launch_url(auth_url)
+            else:
+                error_banner = error_banner_ref.current
+                if error_banner:
+                    error_text = error_text_ref.current
+                    if error_text:
+                        error_text.value = result.get("error", t("error.generic", lang))
+                    error_banner.visible = True
+            page.update()
+
+        page.run_task(do_microsoft)
 
     def on_back_home(e):
         page.go("/")
@@ -82,7 +169,12 @@ def build(page: ft.Page) -> list[ft.Control]:
     # Error banner (hidden by default)
     error_banner = ft.Container(
         ref=error_banner_ref,
-        content=ft.Text("", size=T.FONT_CAPTION, color=T.ERROR),
+        content=ft.Text(
+            "",
+            ref=error_text_ref,
+            size=T.FONT_CAPTION,
+            color=T.ERROR,
+        ),
         bgcolor=ft.Colors.with_opacity(0.15, T.ERROR),
         border_radius=T.RADIUS_SM,
         padding=ft.padding.symmetric(horizontal=T.SPACE_MD, vertical=T.SPACE_SM),

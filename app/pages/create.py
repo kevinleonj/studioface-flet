@@ -1,10 +1,14 @@
-"""StudioFace Create Page — Dark premium 3-step wizard."""
+"""StudioFace Create Page — Dark premium 3-step wizard with real API calls."""
 
 import flet as ft
 
 from app.components.navbar import build_navbar
 from app.i18n import t
-from app.services.upload_service import validate_file, validate_file_count
+from app.services.upload_service import (
+    create_session_and_upload,
+    validate_file,
+    validate_file_count,
+)
 from app.theme import StudioFaceTheme as T
 
 # Style keys matching theme and i18n
@@ -118,6 +122,9 @@ def build(page: ft.Page) -> list[ft.Control]:
         "selected_presentation": None,
         "validation_error": None,
         "is_generating": False,
+        "is_uploading": False,
+        "upload_session_id": None,
+        "upload_ids": [],
     }
 
     # --- File picker setup (Flet 0.82 async API) ---
@@ -224,8 +231,94 @@ def build(page: ft.Page) -> list[ft.Control]:
             or len(state["selected_files"]) < 2
         ):
             return
+
         state["is_generating"] = True
+        state["is_uploading"] = True
         _rebuild_step()
+
+        async def do_generate():
+            api = page.session.store.get("api")
+            if not api:
+                state["is_generating"] = False
+                state["is_uploading"] = False
+                state["validation_error"] = t("error.generic", lang)
+                _rebuild_step()
+                return
+
+            # Step 1: Upload files
+            files_to_upload = [
+                (f["name"], f["bytes"]) for f in state["selected_files"]
+            ]
+            upload_result = await create_session_and_upload(api, files_to_upload)
+
+            if "error" in upload_result:
+                state["is_generating"] = False
+                state["is_uploading"] = False
+                state["validation_error"] = upload_result.get(
+                    "error", t("error.upload_failed", lang)
+                )
+                _rebuild_step()
+                return
+
+            session_id = upload_result.get("session_id", "")
+            upload_ids = upload_result.get("upload_ids", [])
+            state["upload_session_id"] = session_id
+            state["upload_ids"] = upload_ids
+            state["is_uploading"] = False
+            _rebuild_step()
+
+            # Step 2: Create generation
+            gen_result = await api.create_generation(
+                style=state["selected_style"].upper(),
+                upload_ids=upload_ids,
+                presentation=state["selected_presentation"],
+                upload_session_id=session_id,
+            )
+
+            if "error" in gen_result:
+                state["is_generating"] = False
+                state["validation_error"] = gen_result.get(
+                    "error", t("error.generation_failed", lang)
+                )
+                _rebuild_step()
+                return
+
+            generation_id = gen_result.get("id", "")
+
+            # Check if admin user — skip payment
+            user = page.session.store.get("user")
+            is_admin = False
+            if isinstance(user, dict):
+                is_admin = user.get("is_admin", False) or user.get("role") == "admin"
+
+            if is_admin:
+                state["is_generating"] = False
+                page.go(f"/gallery?generation_id={generation_id}")
+                return
+
+            # Step 3: Create checkout
+            checkout_result = await api.create_checkout(
+                generation_id=generation_id,
+                currency="EUR",
+            )
+
+            if "error" in checkout_result:
+                state["is_generating"] = False
+                state["validation_error"] = checkout_result.get(
+                    "error", t("error.generic", lang)
+                )
+                _rebuild_step()
+                return
+
+            checkout_url = checkout_result.get("checkout_url", "")
+            if checkout_url:
+                page.launch_url(checkout_url)
+            else:
+                state["is_generating"] = False
+                state["validation_error"] = t("error.generic", lang)
+                _rebuild_step()
+
+        page.run_task(do_generate)
 
     # --- Step builders ---
     def _build_step1() -> ft.Control:
@@ -408,7 +501,7 @@ def build(page: ft.Page) -> list[ft.Control]:
                                 ft.Text(
                                     t(f"style.{style_key}", lang),
                                     size=T.FONT_BODY,
-                                    weight=ft.FontWeight.W_600,
+                    weight=ft.FontWeight.W_600,
                                     color=T.TEXT_WHITE,
                                     text_align=ft.TextAlign.CENTER,
                                 ),
@@ -618,6 +711,13 @@ def build(page: ft.Page) -> list[ft.Control]:
 
     def _build_generating() -> ft.Control:
         """Generation in progress view."""
+        if state["is_uploading"]:
+            status_text = t("create.uploading", lang)
+            sub_text = t("common.loading", lang)
+        else:
+            status_text = t("create.generating", lang)
+            sub_text = t("create.generating_desc", lang)
+
         return ft.Column(
             controls=[
                 ft.Container(height=T.SPACE_HERO),
@@ -628,14 +728,14 @@ def build(page: ft.Page) -> list[ft.Control]:
                     color=T.PRIMARY_CONTAINER,
                 ),
                 ft.Text(
-                    t("create.generating", lang),
+                    status_text,
                     size=T.FONT_H3,
                     weight=ft.FontWeight.W_600,
                     color=T.TEXT_WHITE,
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(
-                    t("create.generating_desc", lang),
+                    sub_text,
                     size=T.FONT_BODY,
                     color=T.TEXT_SECONDARY,
                     text_align=ft.TextAlign.CENTER,
