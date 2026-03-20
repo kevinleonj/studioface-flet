@@ -33,7 +33,10 @@ async def create_session_and_upload(
     api: StudioFaceAPI,
     files: list[tuple[str, bytes]],
 ) -> dict[str, Any]:
-    """Create an upload session and upload all files."""
+    """Create an upload session and upload all files.
+
+    Returns {"session_id": str, "upload_ids": list[str], "uploaded": list[dict]}.
+    """
     session_result = await api.create_upload_session()
     if "error" in session_result:
         return session_result
@@ -41,10 +44,14 @@ async def create_session_and_upload(
     session_id = session_result.get("session_id") or session_result.get("id", "")
 
     uploaded = []
+    upload_ids: list[str] = []
     for filename, file_bytes in files:
-        result = await api.upload_file(session_id, file_bytes, filename)
+        result = await api.upload_file(file_bytes, filename, session_id)
         if "error" in result:
             return result
         uploaded.append(result)
+        upload_id = result.get("id", "")
+        if upload_id:
+            upload_ids.append(upload_id)
 
-    return {"session_id": session_id, "uploaded": uploaded}
+    return {"session_id": session_id, "upload_ids": upload_ids, "uploaded": uploaded}

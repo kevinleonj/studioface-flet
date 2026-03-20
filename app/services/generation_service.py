@@ -11,12 +11,21 @@ MAX_POLL_ATTEMPTS = 120  # 10 minutes max
 
 async def create_generation(
     api: StudioFaceAPI,
-    session_id: str,
     style: str,
+    upload_ids: list[str],
     presentation: str,
+    upload_session_id: str,
 ) -> dict[str, Any]:
-    """Create a new headshot generation."""
-    return await api.create_generation(session_id, style, presentation)
+    """Create a new headshot generation.
+
+    Args:
+        api: API client instance.
+        style: One of CORPORATE, STARTUP, TECH, BANKING, MEDICINE, CASUAL.
+        upload_ids: List of upload UUIDs from upload_file().
+        presentation: "masculine" or "feminine".
+        upload_session_id: Session UUID from create_upload_session().
+    """
+    return await api.create_generation(style, upload_ids, presentation, upload_session_id)
 
 
 async def poll_generation(
@@ -52,5 +61,8 @@ async def poll_generation(
 async def get_images(
     api: StudioFaceAPI, generation_id: str
 ) -> dict[str, Any]:
-    """Get the generated images for a generation."""
-    return await api.get_generation_images(generation_id)
+    """Get the generated images for a generation.
+
+    Images are included in the generation detail response when status=completed.
+    """
+    return await api.get_generation(generation_id)
