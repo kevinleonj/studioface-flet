@@ -2,6 +2,13 @@
 
 import flet as ft
 
+try:
+    import flet_camera as fc
+
+    HAS_CAMERA = True
+except ImportError:
+    HAS_CAMERA = False
+
 from app.components.navbar import build_navbar
 from app.i18n import t
 from app.services.upload_service import (
@@ -122,6 +129,10 @@ def build(page: ft.Page) -> list[ft.Control]:
         "selected_presentation": None,
         "validation_error": None,
         "is_generating": False,
+        "upload_mode": "files",  # "files" or "camera"
+        "camera_ready": False,
+        "cameras": [],
+        "current_camera_idx": 0,
         "is_uploading": False,
         "upload_session_id": None,
         "upload_ids": [],
@@ -182,6 +193,89 @@ def build(page: ft.Page) -> list[ft.Control]:
         page.run_task(do_pick)
 
     # FilePicker auto-registers as a Service — no overlay needed
+
+    # --- Camera setup (flet-camera, web/iOS/Android only) ---
+    camera = None
+    if HAS_CAMERA:
+        camera = fc.Camera(
+            preview_enabled=True,
+            expand=True,
+            height=300,
+            width=400,
+            visible=False,
+        )
+
+    def on_camera_mode(e):
+        """Switch between file upload and camera mode."""
+        state["upload_mode"] = "camera"
+        state["validation_error"] = None
+        _rebuild_step()
+        if camera and not state["camera_ready"]:
+            async def init_cam():
+                try:
+                    cams = await camera.get_available_cameras()
+                    state["cameras"] = cams
+                    if cams:
+                        front = [c for c in cams if c.lens_direction == fc.CameraLensDirection.FRONT]
+                        initial = front[0] if front else cams[0]
+                        state["current_camera_idx"] = cams.index(initial)
+                        await camera.initialize(
+                            description=initial,
+                            resolution_preset=fc.ResolutionPreset.HIGH,
+                        )
+                        state["camera_ready"] = True
+                        camera.visible = True
+                        page.update()
+                except Exception:
+                    state["upload_mode"] = "files"
+                    state["validation_error"] = t("create.camera_not_available", lang)
+                    _rebuild_step()
+            page.run_task(init_cam)
+
+    def on_files_mode(e):
+        """Switch back to file upload mode."""
+        state["upload_mode"] = "files"
+        state["validation_error"] = None
+        if camera:
+            camera.visible = False
+        _rebuild_step()
+
+    def on_flip_camera(e):
+        """Switch between front and back camera."""
+        if not state["cameras"] or len(state["cameras"]) < 2:
+            return
+        async def do_flip():
+            idx = (state["current_camera_idx"] + 1) % len(state["cameras"])
+            state["current_camera_idx"] = idx
+            await camera.initialize(
+                description=state["cameras"][idx],
+                resolution_preset=fc.ResolutionPreset.HIGH,
+            )
+            page.update()
+        page.run_task(do_flip)
+
+    def on_capture(e):
+        """Capture a photo from the camera."""
+        if len(state["selected_files"]) >= 5:
+            state["validation_error"] = t("create.max_photos", lang)
+            _rebuild_step()
+            return
+        async def do_capture():
+            try:
+                image_bytes = await camera.take_picture()
+                if image_bytes:
+                    idx = len(state["selected_files"]) + 1
+                    state["selected_files"].append({
+                        "name": f"camera_{idx}.jpg",
+                        "size": len(image_bytes),
+                        "bytes": image_bytes,
+                    })
+                    state["validation_error"] = None
+                    _rebuild_step()
+            except Exception:
+                state["validation_error"] = t("error.upload_failed", lang)
+                _rebuild_step()
+        page.run_task(do_capture)
 
     # --- Navigation handlers ---
     def go_next(e):
@@ -323,11 +417,63 @@ def build(page: ft.Page) -> list[ft.Control]:
 
     # --- Step builders ---
     def _build_step1() -> ft.Control:
-        """Upload selfies step (dark themed)."""
+        """Upload selfies step with file upload + camera toggle."""
         selected_files = state["selected_files"]
         validation_error = state["validation_error"]
+        upload_mode = state["upload_mode"]
 
-        upload_icon = ft.Icon(ft.Icons.CAMERA_ALT, size=48, color=T.TEXT_MUTED)
+        # --- Mode toggle: Upload Files / Take Photo ---
+        mode_toggle_controls = [
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.UPLOAD_FILE, size=18,
+                                color=T.BUTTON_TEXT if upload_mode == "files" else T.TEXT_SECONDARY),
+                        ft.Text(t("create.upload_files", lang), size=T.FONT_CAPTION,
+                                color=T.BUTTON_TEXT if upload_mode == "files" else T.TEXT_SECONDARY),
+                    ],
+                    spacing=T.SPACE_SM,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                bgcolor=T.BUTTON_PRIMARY_BG if upload_mode == "files" else T.BG_SURFACE_HIGH,
+                border_radius=T.RADIUS_SM,
+                padding=ft.padding.symmetric(horizontal=T.SPACE_LG, vertical=T.SPACE_SM),
+                on_click=on_files_mode,
+                expand=True,
+            ),
+        ]
+        if HAS_CAMERA:
+            mode_toggle_controls.append(
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.CAMERA_ALT, size=18,
+                                    color=T.BUTTON_TEXT if upload_mode == "camera" else T.TEXT_SECONDARY),
+                            ft.Text(t("create.take_photo", lang), size=T.FONT_CAPTION,
+                                    color=T.BUTTON_TEXT if upload_mode == "camera" else T.TEXT_SECONDARY),
+                        ],
+                        spacing=T.SPACE_SM,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                    bgcolor=T.BUTTON_PRIMARY_BG if upload_mode == "camera" else T.BG_SURFACE_HIGH,
+                    border_radius=T.RADIUS_SM,
+                    padding=ft.padding.symmetric(horizontal=T.SPACE_LG, vertical=T.SPACE_SM),
+                    on_click=on_camera_mode,
+                    expand=True,
+                ),
+            )
+
+        mode_toggle = ft.Container(
+            content=ft.Row(
+                controls=mode_toggle_controls,
+                spacing=T.SPACE_SM,
+            ),
+            width=min(500, page_width - 2 * h_pad),
+            padding=ft.padding.only(bottom=T.SPACE_MD),
+        )
+
+        # --- File upload zone (shown when mode == "files") ---
+        upload_icon = ft.Icon(ft.Icons.UPLOAD_FILE, size=48, color=T.TEXT_MUTED)
         upload_title = ft.Text(
             t("create.upload_title", lang),
             size=T.FONT_H3,
@@ -365,9 +511,79 @@ def build(page: ft.Page) -> list[ft.Control]:
             border_radius=T.RADIUS_LG,
             alignment=ft.Alignment.CENTER,
             bgcolor=T.BG_SURFACE,
+            visible=(upload_mode == "files"),
         )
 
-        controls: list[ft.Control] = [upload_zone]
+        # --- Camera zone (shown when mode == "camera") ---
+        camera_zone_controls: list[ft.Control] = []
+        if HAS_CAMERA and upload_mode == "camera":
+            if state["camera_ready"] and camera:
+                camera_zone_controls = [
+                    ft.Container(
+                        content=camera,
+                        width=min(400, page_width - 2 * h_pad),
+                        height=300,
+                        border_radius=T.RADIUS_MD,
+                        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                        bgcolor=T.BG_SURFACE_HIGH,
+                    ),
+                    ft.Row(
+                        controls=[
+                            ft.OutlinedButton(
+                                t("create.flip_camera", lang),
+                                icon=ft.Icons.FLIP_CAMERA_ANDROID,
+                                style=ft.ButtonStyle(
+                                    color=T.TEXT_SECONDARY,
+                                    side=ft.BorderSide(1, T.OUTLINE),
+                                    shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
+                                ),
+                                on_click=on_flip_camera,
+                                visible=len(state["cameras"]) > 1,
+                            ),
+                            ft.ElevatedButton(
+                                t("create.capture", lang),
+                                icon=ft.Icons.CAMERA,
+                                bgcolor=T.BUTTON_PRIMARY_BG,
+                                color=T.BUTTON_TEXT,
+                                style=ft.ButtonStyle(
+                                    shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
+                                    padding=ft.padding.symmetric(
+                                        horizontal=T.SPACE_LG, vertical=T.SPACE_MD
+                                    ),
+                                ),
+                                on_click=on_capture,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=T.SPACE_MD,
+                    ),
+                ]
+            else:
+                camera_zone_controls = [
+                    ft.ProgressRing(width=32, height=32, color=T.PRIMARY),
+                    ft.Text(
+                        t("create.camera_initializing", lang),
+                        size=T.FONT_BODY,
+                        color=T.TEXT_SECONDARY,
+                    ),
+                ]
+
+        camera_zone = ft.Container(
+            content=ft.Column(
+                controls=camera_zone_controls,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=T.SPACE_MD,
+            ),
+            width=min(500, page_width - 2 * h_pad),
+            padding=ft.padding.all(T.SPACE_XXL),
+            border=ft.border.all(2, T.OUTLINE),
+            border_radius=T.RADIUS_LG,
+            alignment=ft.Alignment.CENTER,
+            bgcolor=T.BG_SURFACE,
+            visible=(upload_mode == "camera"),
+        )
+
+        controls: list[ft.Control] = [mode_toggle, upload_zone, camera_zone]
 
         if selected_files:
             file_chips: list[ft.Control] = []
