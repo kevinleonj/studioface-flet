@@ -1,4 +1,4 @@
-"""StudioFace Payment Success Page — Confirmation after successful payment."""
+"""StudioFace Payment Success Page — Dark premium confirmation."""
 
 import flet as ft
 
@@ -8,8 +8,8 @@ from app.i18n import t
 from app.theme import StudioFaceTheme as T
 
 
-async def build(page: ft.Page) -> ft.View:
-    """Build the payment success confirmation page."""
+def build(page: ft.Page) -> list[ft.Control]:
+    """Build the payment success confirmation page. Returns list[ft.Control]."""
     lang = page.session.store.get("lang") or "en"
     page_width = page.width or 800
     is_mobile = page_width < T.MOBILE_MAX
@@ -17,11 +17,11 @@ async def build(page: ft.Page) -> ft.View:
     def go_gallery(e):
         page.go("/gallery")
 
-    # Success icon
+    # Gold checkmark icon
     success_icon = ft.Icon(
-        name=ft.Icons.CHECK_CIRCLE,
+        ft.Icons.CHECK_CIRCLE,
         size=80,
-        color=T.SUCCESS,
+        color=T.PRIMARY_CONTAINER,
     )
 
     # Title
@@ -29,7 +29,7 @@ async def build(page: ft.Page) -> ft.View:
         t("payment.success_title", lang),
         size=T.FONT_H1,
         weight=ft.FontWeight.BOLD,
-        color=T.TEXT_PRIMARY,
+        color=T.TEXT_WHITE,
         text_align=ft.TextAlign.CENTER,
     )
 
@@ -41,19 +41,19 @@ async def build(page: ft.Page) -> ft.View:
         text_align=ft.TextAlign.CENTER,
     )
 
-    # CTA button
+    # Gold CTA button
     view_gallery_btn = ft.ElevatedButton(
-        text=t("payment.view_gallery", lang),
+        t("payment.view_gallery", lang),
         on_click=go_gallery,
-        bgcolor=T.PRIMARY,
-        color=T.TEXT_ON_PRIMARY,
+        bgcolor=T.BUTTON_PRIMARY_BG,
+        color=T.BUTTON_TEXT,
         height=48,
         width=250,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
             text_style=ft.TextStyle(
                 size=T.FONT_BODY,
-                weight=ft.FontWeight.W600,
+                weight=ft.FontWeight.W_600,
             ),
         ),
     )
@@ -62,11 +62,11 @@ async def build(page: ft.Page) -> ft.View:
     email_note = ft.Text(
         t("payment.email_note", lang),
         size=T.FONT_CAPTION,
-        color=T.TEXT_DISABLED,
+        color=T.TEXT_MUTED,
         text_align=ft.TextAlign.CENTER,
     )
 
-    # Card content
+    # Dark card
     card_content = ft.Container(
         content=ft.Column(
             controls=[
@@ -83,20 +83,15 @@ async def build(page: ft.Page) -> ft.View:
         ),
         padding=ft.padding.all(T.CARD_PADDING if not is_mobile else T.MOBILE_PADDING),
         width=500 if not is_mobile else None,
-        bgcolor=T.SURFACE,
-        border_radius=T.RADIUS_MD,
-        shadow=ft.BoxShadow(
-            spread_radius=0,
-            blur_radius=8,
-            color=ft.Colors.with_opacity(0.08, ft.Colors.BLACK),
-            offset=ft.Offset(0, 2),
-        ),
+        bgcolor=T.BG_SURFACE,
+        border_radius=T.RADIUS_LG,
+        border=ft.border.all(1, T.BORDER),
     )
 
     # Centered card wrapper
     centered_card = ft.Container(
         content=card_content,
-        alignment=ft.alignment.center,
+        alignment=ft.Alignment.CENTER,
         expand=True,
         padding=ft.padding.symmetric(
             horizontal=T.MOBILE_PADDING if is_mobile else T.CONTENT_PADDING,
@@ -107,17 +102,11 @@ async def build(page: ft.Page) -> ft.View:
     main_content = ft.Container(
         content=centered_card,
         expand=True,
-        bgcolor=T.BACKGROUND,
+        bgcolor=T.BG_PRIMARY,
     )
 
-    return ft.View(
-        route="/payment/success",
-        controls=[
-            build_navbar(page),
-            main_content,
-            build_footer(page),
-        ],
-        padding=0,
-        bgcolor=T.BACKGROUND,
-        spacing=0,
-    )
+    return [
+        build_navbar(page),
+        main_content,
+        build_footer(page),
+    ]

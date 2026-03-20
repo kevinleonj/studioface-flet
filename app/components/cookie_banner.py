@@ -1,4 +1,4 @@
-"""StudioFace Cookie Banner — GDPR-compliant cookie consent banner."""
+"""StudioFace Cookie Banner — Dark premium GDPR-compliant banner."""
 
 import flet as ft
 
@@ -9,12 +9,7 @@ _COOKIE_KEY = "studioface_cookie_consent"
 
 
 def build_cookie_banner(page: ft.Page, lang: str = "en") -> ft.Control:
-    """Build a GDPR cookie consent banner with dark background.
-
-    Uses page.session to persist preference within the session.
-    Returns an empty Container if consent has already been given or declined.
-    """
-    # Check session preference
+    """Build a dark cookie consent banner with gold Accept button."""
     consent = page.session.store.get(_COOKIE_KEY)
     if consent is not None:
         return ft.Container(visible=False)
@@ -43,36 +38,36 @@ def build_cookie_banner(page: ft.Page, lang: str = "en") -> ft.Control:
                 t("cookies.title", lang),
                 size=T.FONT_H4,
                 weight=ft.FontWeight.BOLD,
-                color=T.TEXT_ON_PRIMARY,
+                color=T.TEXT_WHITE,
             ),
             ft.Text(
                 t("cookies.desc", lang),
                 size=T.FONT_CAPTION,
-                color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE),
+                color=T.TEXT_SECONDARY,
             ),
         ],
         spacing=T.SPACE_XS,
         expand=True,
     )
 
-    # Accept button (SECONDARY colored)
+    # Gold Accept button
     accept_button = ft.ElevatedButton(
-        text=t("cookies.accept", lang),
+        t("cookies.accept", lang),
         on_click=accept_cookies,
-        bgcolor=T.SECONDARY,
-        color=T.TEXT_ON_SECONDARY,
+        bgcolor=T.BUTTON_PRIMARY_BG,
+        color=T.BUTTON_TEXT,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
         ),
     )
 
-    # Decline button (outlined white)
+    # Outline Decline button
     decline_button = ft.OutlinedButton(
-        text=t("cookies.decline", lang),
+        t("cookies.decline", lang),
         on_click=decline_cookies,
         style=ft.ButtonStyle(
-            color=T.TEXT_ON_PRIMARY,
-            side=ft.BorderSide(1, ft.Colors.with_opacity(0.5, ft.Colors.WHITE)),
+            color=T.TEXT_SECONDARY,
+            side=ft.BorderSide(1, T.OUTLINE),
             shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
         ),
     )
@@ -82,7 +77,6 @@ def build_cookie_banner(page: ft.Page, lang: str = "en") -> ft.Control:
         spacing=T.SPACE_SM,
     )
 
-    # Layout: mobile stacks vertically, desktop side-by-side
     if is_mobile:
         inner_layout = ft.Column(
             controls=[text_section, buttons],
@@ -106,12 +100,7 @@ def build_cookie_banner(page: ft.Page, lang: str = "en") -> ft.Control:
             ),
             width=T.MAX_WIDTH,
         ),
-        bgcolor=T.PRIMARY_DARK,
-        alignment=ft.alignment.center,
-        shadow=ft.BoxShadow(
-            spread_radius=0,
-            blur_radius=8,
-            color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
-            offset=ft.Offset(0, -2),
-        ),
+        bgcolor=T.BG_SURFACE_HIGH,
+        alignment=ft.Alignment.CENTER,
+        border=ft.border.only(top=ft.BorderSide(1, T.BORDER)),
     )

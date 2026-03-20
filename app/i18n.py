@@ -6,9 +6,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
         # Landing page — Hero
         "hero.title": "Professional AI Headshots",
+        "hero.title_dark": "Your Professional AI Photo for Resume",
+        "hero.title_accent": "Resume",
         "hero.subtitle": "Upload a selfie. Choose your style. Get 4 studio-quality photos in minutes.",
+        "hero.subtitle_dark": "Upload a selfie, pick your style, and get studio-quality headshots in minutes. Powered by Google AI.",
         "hero.cta": "Get Started — €6.99",
+        "hero.cta_dark": "Create My Headshot \u2014 \u20ac6.99 \u2192",
+        "hero.badge": "Starting at \u20ac6.99",
+        "hero.trust": "GDPR Compliant \u00b7 Powered by Google AI \u00b7 Secure Payments",
         "hero.photos_generated": "{count} photos generated",
+        # Landing page — Results Gallery
+        "results.label": "RECENT RESULTS FROM REAL CUSTOMERS",
+        # Landing page — Styles section
+        "styles.title": "Choose Your Professional Style",
         # Landing page — Features
         "features.title": "How It Works",
         "features.step1.title": "Upload Selfies",
@@ -124,9 +134,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "es": {
         # Landing page — Hero
         "hero.title": "Fotos Profesionales con IA",
+        "hero.title_dark": "Tu Foto Profesional con IA para CV",
+        "hero.title_accent": "CV",
         "hero.subtitle": "Sube un selfie. Elige tu estilo. Obtén 4 fotos de calidad de estudio en minutos.",
+        "hero.subtitle_dark": "Sube un selfie, elige tu estilo y obtén fotos de calidad de estudio en minutos. Potenciado por Google AI.",
         "hero.cta": "Comenzar — 6,99 €",
+        "hero.cta_dark": "Crear Mi Foto \u2014 6,99 \u20ac \u2192",
+        "hero.badge": "Desde 6,99 \u20ac",
+        "hero.trust": "Cumple RGPD \u00b7 Potenciado por Google AI \u00b7 Pagos Seguros",
         "hero.photos_generated": "{count} fotos generadas",
+        # Landing page — Results Gallery
+        "results.label": "RESULTADOS RECIENTES DE CLIENTES REALES",
+        # Landing page — Styles section
+        "styles.title": "Elige Tu Estilo Profesional",
         # Landing page — Features
         "features.title": "Cómo Funciona",
         "features.step1.title": "Sube Selfies",
@@ -242,9 +262,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "de": {
         # Landing page — Hero
         "hero.title": "Professionelle KI-Porträtfotos",
+        "hero.title_dark": "Dein Professionelles KI-Foto f\u00fcr den Lebenslauf",
+        "hero.title_accent": "Lebenslauf",
         "hero.subtitle": "Lade ein Selfie hoch. Wähle deinen Stil. Erhalte 4 Studioqualität-Fotos in Minuten.",
+        "hero.subtitle_dark": "Lade ein Selfie hoch, w\u00e4hle deinen Stil und erhalte Studioqualit\u00e4t-Fotos in Minuten. Powered by Google AI.",
         "hero.cta": "Jetzt starten — 6,99 €",
+        "hero.cta_dark": "Mein Foto erstellen \u2014 6,99 \u20ac \u2192",
+        "hero.badge": "Ab 6,99 \u20ac",
+        "hero.trust": "DSGVO-konform \u00b7 Powered by Google AI \u00b7 Sichere Zahlungen",
         "hero.photos_generated": "{count} Fotos erstellt",
+        # Landing page — Results Gallery
+        "results.label": "AKTUELLE ERGEBNISSE VON ECHTEN KUNDEN",
+        # Landing page — Styles section
+        "styles.title": "W\u00e4hle Deinen Professionellen Stil",
         # Landing page — Features
         "features.title": "So funktioniert es",
         "features.step1.title": "Selfies hochladen",

@@ -1,4 +1,4 @@
-"""StudioFace Progress Tracker — Step indicator with circles and connecting lines."""
+"""StudioFace Progress Tracker — Dark premium step indicator."""
 
 import flet as ft
 
@@ -6,7 +6,7 @@ from app.theme import StudioFaceTheme as T
 
 
 def build_progress_tracker(current_step: int, steps: list[str]) -> ft.Control:
-    """Build a horizontal step indicator (1->2->3) with circles and lines.
+    """Build a horizontal step indicator with gold active and muted future states.
 
     Args:
         current_step: 0-indexed current step number.
@@ -24,29 +24,29 @@ def build_progress_tracker(current_step: int, steps: list[str]) -> ft.Control:
             circle_content = ft.Icon(
                 ft.Icons.CHECK,
                 size=18,
-                color=T.TEXT_ON_PRIMARY,
+                color=T.TEXT_WHITE,
             )
-            circle_bgcolor = T.PRIMARY
+            circle_bgcolor = T.SUCCESS
             circle_border = None
         elif is_current:
             circle_content = ft.Text(
                 str(i + 1),
                 size=T.FONT_CAPTION,
                 weight=ft.FontWeight.BOLD,
-                color=T.TEXT_ON_PRIMARY,
+                color=T.ON_PRIMARY,
                 text_align=ft.TextAlign.CENTER,
             )
-            circle_bgcolor = T.PRIMARY
+            circle_bgcolor = T.PRIMARY_CONTAINER
             circle_border = None
         else:
             circle_content = ft.Text(
                 str(i + 1),
                 size=T.FONT_CAPTION,
-                weight=ft.FontWeight.W500,
-                color=T.TEXT_DISABLED,
+                weight=ft.FontWeight.W_500,
+                color=T.TEXT_MUTED,
                 text_align=ft.TextAlign.CENTER,
             )
-            circle_bgcolor = T.SURFACE
+            circle_bgcolor = T.BG_SURFACE_HIGH
             circle_border = ft.border.all(2, T.OUTLINE_VARIANT)
 
         # Circle
@@ -57,21 +57,21 @@ def build_progress_tracker(current_step: int, steps: list[str]) -> ft.Control:
             border_radius=18,
             bgcolor=circle_bgcolor,
             border=circle_border,
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment.CENTER,
         )
 
         # Label below circle
-        label_color = T.TEXT_PRIMARY if (is_completed or is_current) else T.TEXT_DISABLED
+        label_color = T.TEXT_WHITE if is_current else (T.SUCCESS if is_completed else T.TEXT_MUTED)
         step_label = ft.Text(
             label,
             size=T.FONT_SMALL,
             color=label_color,
-            weight=ft.FontWeight.W500 if is_current else ft.FontWeight.W400,
+            weight=ft.FontWeight.W_500 if is_current else ft.FontWeight.W_400,
             text_align=ft.TextAlign.CENTER,
             width=80,
         )
 
-        # Step column (circle + label)
+        # Step column
         step_column = ft.Column(
             controls=[circle, step_label],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -80,9 +80,9 @@ def build_progress_tracker(current_step: int, steps: list[str]) -> ft.Control:
 
         controls.append(step_column)
 
-        # Connecting line between steps (not after last step)
+        # Connecting line between steps
         if i < len(steps) - 1:
-            line_color = T.PRIMARY if is_completed else T.OUTLINE_VARIANT
+            line_color = T.SUCCESS if is_completed else T.BG_SURFACE_HIGH
             connecting_line = ft.Container(
                 width=40,
                 height=2,

@@ -1,17 +1,10 @@
-"""StudioFace Create Page — 3-step wizard: Upload, Style, Presentation + Generate."""
+"""StudioFace Create Page — Dark premium 3-step wizard."""
 
 import flet as ft
 
 from app.components.navbar import build_navbar
 from app.i18n import t
-from app.services.api_client import StudioFaceAPI
-from app.services.generation_service import create_generation
-from app.services.payment_service import start_checkout
-from app.services.upload_service import (
-    create_session_and_upload,
-    validate_file,
-    validate_file_count,
-)
+from app.services.upload_service import validate_file, validate_file_count
 from app.theme import StudioFaceTheme as T
 
 # Style keys matching theme and i18n
@@ -19,7 +12,7 @@ _STYLES = ["corporate", "medical", "banking", "startup", "casual", "tech"]
 
 
 def _build_progress_tracker(current_step: int, lang: str) -> ft.Control:
-    """Build the 3-step progress indicator."""
+    """Build the 3-step progress indicator with gold active state."""
     steps = [
         (1, "create.step_upload", ft.Icons.CLOUD_UPLOAD),
         (2, "create.step_style", ft.Icons.PALETTE),
@@ -32,17 +25,17 @@ def _build_progress_tracker(current_step: int, lang: str) -> ft.Control:
 
         if is_done:
             circle_bg = T.SUCCESS
-            circle_content = ft.Icon(ft.Icons.CHECK, color=T.TEXT_ON_PRIMARY, size=18)
+            circle_content = ft.Icon(ft.Icons.CHECK, color=T.TEXT_WHITE, size=18)
         elif is_active:
-            circle_bg = T.PRIMARY
+            circle_bg = T.PRIMARY_CONTAINER
             circle_content = ft.Text(
-                str(num), color=T.TEXT_ON_PRIMARY, size=T.FONT_CAPTION,
+                str(num), color=T.ON_PRIMARY, size=T.FONT_CAPTION,
                 weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER,
             )
         else:
-            circle_bg = T.OUTLINE_VARIANT
+            circle_bg = T.BG_SURFACE_HIGH
             circle_content = ft.Text(
-                str(num), color=T.TEXT_SECONDARY, size=T.FONT_CAPTION,
+                str(num), color=T.TEXT_MUTED, size=T.FONT_CAPTION,
                 text_align=ft.TextAlign.CENTER,
             )
 
@@ -52,14 +45,14 @@ def _build_progress_tracker(current_step: int, lang: str) -> ft.Control:
             height=36,
             border_radius=18,
             bgcolor=circle_bg,
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment.CENTER,
         )
 
         label = ft.Text(
             t(key, lang),
             size=T.FONT_SMALL,
-            color=T.PRIMARY if is_active else (T.SUCCESS if is_done else T.TEXT_DISABLED),
-            weight=ft.FontWeight.W600 if is_active else ft.FontWeight.W400,
+            color=T.PRIMARY if is_active else (T.SUCCESS if is_done else T.TEXT_MUTED),
+            weight=ft.FontWeight.W_600 if is_active else ft.FontWeight.W_400,
             text_align=ft.TextAlign.CENTER,
         )
 
@@ -74,7 +67,7 @@ def _build_progress_tracker(current_step: int, lang: str) -> ft.Control:
 
         # Connector line between steps
         if i < len(steps) - 1:
-            line_color = T.SUCCESS if num < current_step else T.OUTLINE_VARIANT
+            line_color = T.SUCCESS if num < current_step else T.BG_SURFACE_HIGH
             items.append(
                 ft.Container(
                     bgcolor=line_color,
@@ -94,13 +87,13 @@ def _build_progress_tracker(current_step: int, lang: str) -> ft.Control:
     )
 
 
-def _build_footer(lang: str) -> ft.Control:
-    """Minimal footer."""
+def _build_create_footer(lang: str) -> ft.Control:
+    """Minimal dark footer."""
     return ft.Container(
         content=ft.Row(
             controls=[
-                ft.Text(t("footer.copyright", lang), size=T.FONT_SMALL, color=T.TEXT_SECONDARY),
-                ft.Text(t("footer.gdpr", lang), size=T.FONT_SMALL, color=T.TEXT_SECONDARY),
+                ft.Text(t("footer.copyright", lang), size=T.FONT_SMALL, color=T.TEXT_MUTED),
+                ft.Text(t("footer.gdpr", lang), size=T.FONT_SMALL, color=T.TEXT_MUTED),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=T.SPACE_LG,
@@ -110,179 +103,142 @@ def _build_footer(lang: str) -> ft.Control:
     )
 
 
-async def build(page: ft.Page) -> ft.View:
-    """Build the Create page with a 3-step wizard."""
+def build(page: ft.Page) -> list[ft.Control]:
+    """Build the Create page with a 3-step wizard. Returns list[ft.Control]."""
     lang = page.session.store.get("lang") or "en"
-    api: StudioFaceAPI = page.session.store.get("api")
     page_width = page.width or 800
     is_mobile = page_width < T.MOBILE_MAX
     h_pad = T.MOBILE_PADDING if is_mobile else T.CONTENT_PADDING
 
     # --- Mutable wizard state ---
-    current_step = 1
-    selected_files: list[dict] = []  # [{name, size, bytes}]
-    selected_style: str | None = None
-    selected_presentation: str | None = None
-    validation_error: str | None = None
-    is_generating = False
+    state = {
+        "current_step": 1,
+        "selected_files": [],
+        "selected_style": None,
+        "selected_presentation": None,
+        "validation_error": None,
+        "is_generating": False,
+    }
 
-    # --- Refs for dynamic content ---
-    content_container = ft.Ref[ft.Container]()
-    main_column = ft.Ref[ft.Column]()
-
-    # --- File picker setup ---
+    # --- File picker setup (Flet 0.82 async API) ---
     file_picker = ft.FilePicker()
 
-    async def on_files_picked(e: ft.FilePickerResultEvent):
-        nonlocal selected_files, validation_error
-        if not e.files:
-            return
+    def on_pick_files_click(e):
+        """Trigger async file picker."""
+        async def do_pick():
+            result = await file_picker.pick_files(
+                allow_multiple=True,
+                allowed_extensions=["jpg", "jpeg", "png"],
+                dialog_title=t("create.upload_button", lang),
+                file_type=ft.FilePickerFileType.CUSTOM,
+                with_data=True,
+            )
+            if not result:
+                return
 
-        validation_error = None
-        for f in e.files:
-            # Check max count
-            if len(selected_files) >= 5:
-                validation_error = t("create.max_photos", lang)
-                break
+            state["validation_error"] = None
+            for f in result:
+                if len(state["selected_files"]) >= 5:
+                    state["validation_error"] = t("create.max_photos", lang)
+                    break
 
-            # Validate format
-            err = validate_file(f.name, f.size)
-            if err:
-                validation_error = t(err, lang)
-                continue
+                err = validate_file(f.name, f.size)
+                if err:
+                    state["validation_error"] = t(err, lang)
+                    continue
 
-            # Read file bytes
-            try:
-                with open(f.path, "rb") as fh:
-                    file_bytes = fh.read()
-            except Exception:
-                validation_error = t("error.upload_failed", lang)
-                continue
+                file_bytes = f.bytes
+                if file_bytes is None and f.path:
+                    try:
+                        with open(f.path, "rb") as fh:
+                            file_bytes = fh.read()
+                    except Exception:
+                        state["validation_error"] = t("error.upload_failed", lang)
+                        continue
 
-            # Avoid duplicates
-            if any(sf["name"] == f.name for sf in selected_files):
-                continue
+                if file_bytes is None:
+                    state["validation_error"] = t("error.upload_failed", lang)
+                    continue
 
-            selected_files.append({
-                "name": f.name,
-                "size": f.size,
-                "bytes": file_bytes,
-            })
+                if any(sf["name"] == f.name for sf in state["selected_files"]):
+                    continue
 
-        await _rebuild_step()
+                state["selected_files"].append({
+                    "name": f.name,
+                    "size": f.size,
+                    "bytes": file_bytes,
+                })
 
-    file_picker.on_result = on_files_picked
+            _rebuild_step()
 
-    # Add file picker to overlay
+        page.run_task(do_pick)
+
     page.overlay.append(file_picker)
 
     # --- Navigation handlers ---
-    async def go_next(e):
-        nonlocal current_step, validation_error
-        if current_step == 1:
-            count_err = validate_file_count(len(selected_files))
+    def go_next(e):
+        if state["current_step"] == 1:
+            count_err = validate_file_count(len(state["selected_files"]))
             if count_err:
-                validation_error = t(count_err, lang)
-                await _rebuild_step()
+                state["validation_error"] = t(count_err, lang)
+                _rebuild_step()
                 return
-            validation_error = None
-            current_step = 2
-        elif current_step == 2:
-            if not selected_style:
+            state["validation_error"] = None
+            state["current_step"] = 2
+        elif state["current_step"] == 2:
+            if not state["selected_style"]:
                 return
-            current_step = 3
-        await _rebuild_step()
+            state["current_step"] = 3
+        _rebuild_step()
 
-    async def go_back(e):
-        nonlocal current_step
-        if current_step > 1:
-            current_step -= 1
-            await _rebuild_step()
+    def go_back(e):
+        if state["current_step"] > 1:
+            state["current_step"] -= 1
+            _rebuild_step()
 
-    # --- File removal ---
     def make_remove_handler(filename: str):
-        async def handler(e):
-            nonlocal selected_files, validation_error
-            selected_files = [f for f in selected_files if f["name"] != filename]
-            validation_error = None
-            await _rebuild_step()
+        def handler(e):
+            state["selected_files"] = [
+                f for f in state["selected_files"] if f["name"] != filename
+            ]
+            state["validation_error"] = None
+            _rebuild_step()
         return handler
 
-    # --- Style selection ---
     def make_style_handler(style: str):
-        async def handler(e):
-            nonlocal selected_style
-            selected_style = style
-            await _rebuild_step()
+        def handler(e):
+            state["selected_style"] = style
+            _rebuild_step()
         return handler
 
-    # --- Presentation selection ---
     def make_presentation_handler(pres: str):
-        async def handler(e):
-            nonlocal selected_presentation
-            selected_presentation = pres
-            await _rebuild_step()
+        def handler(e):
+            state["selected_presentation"] = pres
+            _rebuild_step()
         return handler
 
-    # --- Generate handler ---
-    async def on_generate(e):
-        nonlocal is_generating, validation_error
-        if not selected_style or not selected_presentation or len(selected_files) < 2:
+    def on_generate(e):
+        if (
+            not state["selected_style"]
+            or not state["selected_presentation"]
+            or len(state["selected_files"]) < 2
+        ):
             return
-
-        is_generating = True
-        await _rebuild_step()
-
-        try:
-            # 1. Upload files
-            files_to_upload = [(f["name"], f["bytes"]) for f in selected_files]
-            upload_result = await create_session_and_upload(api, files_to_upload)
-            if "error" in upload_result:
-                is_generating = False
-                validation_error = upload_result["error"]
-                await _rebuild_step()
-                return
-
-            session_id = upload_result["session_id"]
-
-            # 2. Create generation
-            gen_result = await create_generation(
-                api, session_id, selected_style, selected_presentation,
-            )
-            if "error" in gen_result:
-                is_generating = False
-                validation_error = gen_result["error"]
-                await _rebuild_step()
-                return
-
-            generation_id = gen_result.get("generation_id") or gen_result.get("id", "")
-            page.session.store.set("current_generation_id", generation_id)
-
-            # 3. Create checkout and redirect to Stripe
-            checkout_result = await start_checkout(api, page, generation_id)
-            if "error" in checkout_result:
-                is_generating = False
-                validation_error = checkout_result["error"]
-                await _rebuild_step()
-                return
-
-            # Stripe redirect happened via launch_url — user will come back after payment
-
-        except Exception as exc:
-            is_generating = False
-            validation_error = str(exc) or t("error.generic", lang)
-            await _rebuild_step()
+        state["is_generating"] = True
+        _rebuild_step()
 
     # --- Step builders ---
     def _build_step1() -> ft.Control:
-        """Upload selfies step."""
-        # Upload zone
-        upload_icon = ft.Icon(ft.Icons.CAMERA_ALT, size=48, color=T.TEXT_DISABLED)
+        """Upload selfies step (dark themed)."""
+        selected_files = state["selected_files"]
+        validation_error = state["validation_error"]
+
+        upload_icon = ft.Icon(ft.Icons.CAMERA_ALT, size=48, color=T.TEXT_MUTED)
         upload_title = ft.Text(
             t("create.upload_title", lang),
             size=T.FONT_H3,
-            weight=ft.FontWeight.W600,
-            color=T.TEXT_PRIMARY,
+            weight=ft.FontWeight.W_600,
+            color=T.TEXT_WHITE,
             text_align=ft.TextAlign.CENTER,
         )
         upload_desc = ft.Text(
@@ -292,19 +248,15 @@ async def build(page: ft.Page) -> ft.View:
             text_align=ft.TextAlign.CENTER,
         )
         choose_btn = ft.ElevatedButton(
-            text=t("create.upload_button", lang),
+            t("create.upload_button", lang),
             icon=ft.Icons.ADD_PHOTO_ALTERNATE,
-            bgcolor=T.PRIMARY,
-            color=T.TEXT_ON_PRIMARY,
+            bgcolor=T.BUTTON_PRIMARY_BG,
+            color=T.BUTTON_TEXT,
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
                 padding=ft.padding.symmetric(horizontal=T.SPACE_LG, vertical=T.SPACE_MD),
             ),
-            on_click=lambda _: file_picker.pick_files(
-                allow_multiple=True,
-                allowed_extensions=["jpg", "jpeg", "png"],
-                dialog_title=t("create.upload_button", lang),
-            ),
+            on_click=on_pick_files_click,
         )
 
         upload_zone = ft.Container(
@@ -315,22 +267,21 @@ async def build(page: ft.Page) -> ft.View:
             ),
             width=min(500, page_width - 2 * h_pad),
             padding=ft.padding.all(T.SPACE_XXL),
-            border=ft.border.all(2, T.OUTLINE_VARIANT),
+            border=ft.border.all(2, T.OUTLINE),
             border_radius=T.RADIUS_LG,
-            alignment=ft.alignment.center,
-            bgcolor=T.SURFACE_VARIANT,
+            alignment=ft.Alignment.CENTER,
+            bgcolor=T.BG_SURFACE,
         )
 
         controls: list[ft.Control] = [upload_zone]
 
-        # Show selected files as chips
         if selected_files:
             file_chips: list[ft.Control] = []
             for f in selected_files:
                 file_chips.append(
                     ft.Chip(
                         label=ft.Text(f["name"], size=T.FONT_SMALL),
-                        bgcolor=T.PRIMARY_CONTAINER,
+                        bgcolor=T.BG_SURFACE_HIGH,
                         delete_icon=ft.Icons.CLOSE,
                         on_delete=make_remove_handler(f["name"]),
                     )
@@ -355,7 +306,6 @@ async def build(page: ft.Page) -> ft.View:
                 )
             )
 
-        # Validation error
         if validation_error:
             controls.append(
                 ft.Text(
@@ -366,15 +316,14 @@ async def build(page: ft.Page) -> ft.View:
                 )
             )
 
-        # Continue button
         can_continue = len(selected_files) >= 2
         controls.append(
             ft.Container(
                 content=ft.ElevatedButton(
-                    text=t("common.continue", lang),
+                    t("common.continue", lang),
                     icon=ft.Icons.ARROW_FORWARD,
-                    bgcolor=T.SECONDARY if can_continue else T.TEXT_DISABLED,
-                    color=T.TEXT_ON_SECONDARY if can_continue else T.SURFACE,
+                    bgcolor=T.BUTTON_PRIMARY_BG if can_continue else T.TEXT_DISABLED,
+                    color=T.BUTTON_TEXT if can_continue else T.BG_SURFACE,
                     disabled=not can_continue,
                     on_click=go_next,
                     style=ft.ButtonStyle(
@@ -393,109 +342,108 @@ async def build(page: ft.Page) -> ft.View:
         )
 
     def _build_step2() -> ft.Control:
-        """Choose style step."""
+        """Choose style step with real photos."""
+        selected_style = state["selected_style"]
+
         title = ft.Text(
             t("create.style_title", lang),
             size=T.FONT_H3,
-            weight=ft.FontWeight.W600,
-            color=T.TEXT_PRIMARY,
+            weight=ft.FontWeight.W_600,
+            color=T.TEXT_WHITE,
             text_align=ft.TextAlign.CENTER,
         )
-
-        # Determine grid columns based on width
-        if is_mobile:
-            cols = 1
-        elif page_width < T.TABLET_MAX:
-            cols = 2
-        else:
-            cols = 3
 
         cards: list[ft.Control] = []
         for style_key in _STYLES:
             is_selected = selected_style == style_key
-            style_color = T.STYLE_COLORS.get(style_key, T.PRIMARY)
-            style_icon_name = T.STYLE_ICONS.get(style_key, "star")
+            photo_url = T.STYLE_PHOTOS.get(style_key, "")
 
-            # Map string icon names to ft.Icons
-            icon_map = {
-                "business_center": ft.Icons.BUSINESS_CENTER,
-                "local_hospital": ft.Icons.LOCAL_HOSPITAL,
-                "account_balance": ft.Icons.ACCOUNT_BALANCE,
-                "rocket_launch": ft.Icons.ROCKET_LAUNCH,
-                "emoji_people": ft.Icons.EMOJI_PEOPLE,
-                "computer": ft.Icons.COMPUTER,
-            }
-            icon_ref = icon_map.get(style_icon_name, ft.Icons.STAR)
+            card_border = (
+                ft.border.all(3, T.PRIMARY_CONTAINER)
+                if is_selected
+                else ft.border.all(1, T.BORDER)
+            )
 
-            card_border = ft.border.all(3, T.SECONDARY) if is_selected else ft.border.all(1, T.OUTLINE_VARIANT)
+            # Image area
+            if photo_url:
+                image_area = ft.Container(
+                    content=ft.Image(
+                        src=photo_url,
+                        fit=ft.BoxFit.COVER,
+                        height=120,
+                    ),
+                    height=120,
+                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                    border_radius=ft.border_radius.only(
+                        top_left=T.RADIUS_MD,
+                        top_right=T.RADIUS_MD,
+                    ),
+                )
+            else:
+                style_color = T.STYLE_COLORS.get(style_key, T.PRIMARY)
+                image_area = ft.Container(
+                    content=ft.Icon(ft.Icons.STAR, color=T.TEXT_WHITE, size=28),
+                    height=120,
+                    bgcolor=style_color,
+                    border_radius=ft.border_radius.only(
+                        top_left=T.RADIUS_MD,
+                        top_right=T.RADIUS_MD,
+                    ),
+                    alignment=ft.Alignment.CENTER,
+                )
 
             checkmark = ft.Container(
-                content=ft.Icon(ft.Icons.CHECK_CIRCLE, color=T.SECONDARY, size=24),
-                alignment=ft.alignment.top_right,
+                content=ft.Icon(ft.Icons.CHECK_CIRCLE, color=T.PRIMARY_CONTAINER, size=24),
+                alignment=ft.Alignment.TOP_RIGHT,
                 padding=ft.padding.all(T.SPACE_SM),
                 visible=is_selected,
             )
 
-            color_band = ft.Container(
-                bgcolor=style_color,
-                height=6,
-                border_radius=ft.border_radius.only(
-                    top_left=T.RADIUS_MD, top_right=T.RADIUS_MD,
-                ),
-            )
-
             card_content = ft.Column(
                 controls=[
-                    color_band,
-                    ft.Stack(
-                        controls=[
-                            ft.Container(
-                                content=ft.Column(
-                                    controls=[
-                                        ft.Icon(icon_ref, size=36, color=style_color),
-                                        ft.Text(
-                                            t(f"style.{style_key}", lang),
-                                            size=T.FONT_H4,
-                                            weight=ft.FontWeight.W600,
-                                            color=T.TEXT_PRIMARY,
-                                            text_align=ft.TextAlign.CENTER,
-                                        ),
-                                        ft.Text(
-                                            t(f"style.{style_key}.desc", lang),
-                                            size=T.FONT_CAPTION,
-                                            color=T.TEXT_SECONDARY,
-                                            text_align=ft.TextAlign.CENTER,
-                                            max_lines=2,
-                                            overflow=ft.TextOverflow.ELLIPSIS,
-                                        ),
-                                    ],
-                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                                    spacing=T.SPACE_SM,
-                                    alignment=ft.MainAxisAlignment.CENTER,
+                    image_area,
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Text(
+                                    t(f"style.{style_key}", lang),
+                                    size=T.FONT_BODY,
+                                    weight=ft.FontWeight.W_600,
+                                    color=T.TEXT_WHITE,
+                                    text_align=ft.TextAlign.CENTER,
                                 ),
-                                padding=ft.padding.all(T.SPACE_MD),
-                            ),
-                            checkmark,
-                        ],
+                                ft.Text(
+                                    t(f"style.{style_key}.desc", lang),
+                                    size=T.FONT_SMALL,
+                                    color=T.TEXT_SECONDARY,
+                                    text_align=ft.TextAlign.CENTER,
+                                    max_lines=2,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                ),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=T.SPACE_XS,
+                        ),
+                        padding=ft.padding.all(T.SPACE_SM),
                     ),
                 ],
                 spacing=0,
             )
 
             card = ft.Container(
-                content=card_content,
+                content=ft.Stack(
+                    controls=[card_content, checkmark],
+                ),
                 border=card_border,
                 border_radius=T.RADIUS_MD,
-                bgcolor=T.SURFACE,
+                bgcolor=T.BG_SURFACE,
                 clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
                 on_click=make_style_handler(style_key),
                 ink=True,
-                animate=ft.animation.Animation(T.ANIM_FAST, ft.AnimationCurve.EASE_IN_OUT),
             )
 
             cards.append(card)
 
-        # Build responsive grid
         grid = ft.ResponsiveRow(
             controls=[
                 ft.Container(
@@ -508,11 +456,10 @@ async def build(page: ft.Page) -> ft.View:
             run_spacing=T.SPACE_MD,
         )
 
-        # Navigation buttons
         nav_row = ft.Row(
             controls=[
                 ft.OutlinedButton(
-                    text=t("common.back", lang),
+                    t("common.back", lang),
                     icon=ft.Icons.ARROW_BACK,
                     on_click=go_back,
                     style=ft.ButtonStyle(
@@ -523,10 +470,10 @@ async def build(page: ft.Page) -> ft.View:
                     ),
                 ),
                 ft.ElevatedButton(
-                    text=t("common.continue", lang),
+                    t("common.continue", lang),
                     icon=ft.Icons.ARROW_FORWARD,
-                    bgcolor=T.SECONDARY if selected_style else T.TEXT_DISABLED,
-                    color=T.TEXT_ON_SECONDARY if selected_style else T.SURFACE,
+                    bgcolor=T.BUTTON_PRIMARY_BG if selected_style else T.TEXT_DISABLED,
+                    color=T.BUTTON_TEXT if selected_style else T.BG_SURFACE,
                     disabled=not selected_style,
                     on_click=go_next,
                     style=ft.ButtonStyle(
@@ -546,11 +493,14 @@ async def build(page: ft.Page) -> ft.View:
 
     def _build_step3() -> ft.Control:
         """Presentation selection + generate step."""
+        selected_presentation = state["selected_presentation"]
+        validation_error = state["validation_error"]
+
         title = ft.Text(
             t("create.presentation_title", lang),
             size=T.FONT_H3,
-            weight=ft.FontWeight.W600,
-            color=T.TEXT_PRIMARY,
+            weight=ft.FontWeight.W_600,
+            color=T.TEXT_WHITE,
             text_align=ft.TextAlign.CENTER,
         )
 
@@ -562,8 +512,12 @@ async def build(page: ft.Page) -> ft.View:
         pres_cards: list[ft.Control] = []
         for pres_key, pres_icon, pres_label_key in presentations:
             is_selected = selected_presentation == pres_key
-            card_bg = T.PRIMARY_CONTAINER if is_selected else T.SURFACE
-            card_border = ft.border.all(2, T.PRIMARY) if is_selected else ft.border.all(1, T.OUTLINE_VARIANT)
+            card_bg = T.BG_SURFACE_HIGH if is_selected else T.BG_SURFACE
+            card_border = (
+                ft.border.all(2, T.PRIMARY_CONTAINER)
+                if is_selected
+                else ft.border.all(1, T.BORDER)
+            )
 
             card = ft.Container(
                 content=ft.Column(
@@ -576,7 +530,7 @@ async def build(page: ft.Page) -> ft.View:
                         ft.Text(
                             t(pres_label_key, lang),
                             size=T.FONT_H4,
-                            weight=ft.FontWeight.W600,
+                            weight=ft.FontWeight.W_600,
                             color=T.PRIMARY if is_selected else T.TEXT_PRIMARY,
                             text_align=ft.TextAlign.CENTER,
                         ),
@@ -591,10 +545,9 @@ async def build(page: ft.Page) -> ft.View:
                 border=card_border,
                 border_radius=T.RADIUS_MD,
                 bgcolor=card_bg,
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment.CENTER,
                 on_click=make_presentation_handler(pres_key),
                 ink=True,
-                animate=ft.animation.Animation(T.ANIM_FAST, ft.AnimationCurve.EASE_IN_OUT),
             )
             pres_cards.append(card)
 
@@ -604,7 +557,6 @@ async def build(page: ft.Page) -> ft.View:
             spacing=T.SPACE_LG,
         )
 
-        # Validation error
         error_text = ft.Text(
             validation_error or "",
             size=T.FONT_CAPTION,
@@ -613,33 +565,31 @@ async def build(page: ft.Page) -> ft.View:
             visible=bool(validation_error),
         )
 
-        # Generate button
         can_generate = bool(selected_presentation)
         generate_btn = ft.ElevatedButton(
-            text=t("create.generate", lang),
+            t("create.generate", lang),
             icon=ft.Icons.AUTO_AWESOME,
-            bgcolor=T.SECONDARY if can_generate else T.TEXT_DISABLED,
-            color=T.TEXT_ON_SECONDARY if can_generate else T.SURFACE,
+            bgcolor=T.BUTTON_PRIMARY_BG if can_generate else T.TEXT_DISABLED,
+            color=T.BUTTON_TEXT if can_generate else T.BG_SURFACE,
             disabled=not can_generate,
             on_click=on_generate,
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
                 padding=ft.padding.symmetric(horizontal=T.SPACE_XL, vertical=T.SPACE_MD),
-                text_style=ft.TextStyle(size=T.FONT_H4, weight=ft.FontWeight.W600),
+                text_style=ft.TextStyle(size=T.FONT_H4, weight=ft.FontWeight.W_600),
             ),
         )
 
         stripe_note = ft.Text(
             t("create.stripe_note", lang),
             size=T.FONT_SMALL,
-            color=T.TEXT_DISABLED,
+            color=T.TEXT_MUTED,
             text_align=ft.TextAlign.CENTER,
             italic=True,
         )
 
-        # Back button
         back_btn = ft.OutlinedButton(
-            text=t("common.back", lang),
+            t("common.back", lang),
             icon=ft.Icons.ARROW_BACK,
             on_click=go_back,
             style=ft.ButtonStyle(
@@ -675,13 +625,13 @@ async def build(page: ft.Page) -> ft.View:
                     width=64,
                     height=64,
                     stroke_width=4,
-                    color=T.SECONDARY,
+                    color=T.PRIMARY_CONTAINER,
                 ),
                 ft.Text(
                     t("create.generating", lang),
                     size=T.FONT_H3,
-                    weight=ft.FontWeight.W600,
-                    color=T.TEXT_PRIMARY,
+                    weight=ft.FontWeight.W_600,
+                    color=T.TEXT_WHITE,
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(
@@ -698,19 +648,22 @@ async def build(page: ft.Page) -> ft.View:
         )
 
     def _build_current_step() -> ft.Control:
-        """Return the content for the current step."""
-        if is_generating:
+        if state["is_generating"]:
             return _build_generating()
-        if current_step == 1:
+        if state["current_step"] == 1:
             return _build_step1()
-        if current_step == 2:
+        if state["current_step"] == 2:
             return _build_step2()
         return _build_step3()
 
-    async def _rebuild_step():
-        """Rebuild the step content and update the page."""
+    def _rebuild_step():
+        current_step = state["current_step"]
         step_content = _build_current_step()
-        progress = _build_progress_tracker(current_step, lang) if not is_generating else ft.Container()
+        progress = (
+            _build_progress_tracker(current_step, lang)
+            if not state["is_generating"]
+            else ft.Container()
+        )
 
         new_controls = [
             build_navbar(page),
@@ -722,7 +675,7 @@ async def build(page: ft.Page) -> ft.View:
                                 t("create.title", lang),
                                 size=T.FONT_H1,
                                 weight=ft.FontWeight.BOLD,
-                                color=T.TEXT_PRIMARY,
+                                color=T.TEXT_WHITE,
                                 text_align=ft.TextAlign.CENTER,
                             ),
                             progress,
@@ -739,24 +692,25 @@ async def build(page: ft.Page) -> ft.View:
                     ),
                 ),
                 expand=True,
-                bgcolor=T.BACKGROUND,
-                alignment=ft.alignment.top_center,
+                bgcolor=T.BG_PRIMARY,
+                alignment=ft.Alignment.TOP_CENTER,
             ),
-            _build_footer(lang),
+            _build_create_footer(lang),
         ]
 
-        view.controls = new_controls
+        page.controls.clear()
+        page.controls.extend(new_controls)
         page.update()
 
-    # --- Build initial view ---
-    progress = _build_progress_tracker(current_step, lang)
+    # --- Build initial controls ---
+    progress = _build_progress_tracker(state["current_step"], lang)
     step_content = _build_current_step()
 
     page_title = ft.Text(
         t("create.title", lang),
         size=T.FONT_H1,
         weight=ft.FontWeight.BOLD,
-        color=T.TEXT_PRIMARY,
+        color=T.TEXT_WHITE,
         text_align=ft.TextAlign.CENTER,
     )
 
@@ -775,20 +729,12 @@ async def build(page: ft.Page) -> ft.View:
             ),
         ),
         expand=True,
-        bgcolor=T.BACKGROUND,
-        alignment=ft.alignment.top_center,
+        bgcolor=T.BG_PRIMARY,
+        alignment=ft.Alignment.TOP_CENTER,
     )
 
-    view = ft.View(
-        route="/create",
-        controls=[
-            build_navbar(page),
-            body,
-            _build_footer(lang),
-        ],
-        bgcolor=T.BACKGROUND,
-        padding=0,
-        spacing=0,
-    )
-
-    return view
+    return [
+        build_navbar(page),
+        body,
+        _build_create_footer(lang),
+    ]

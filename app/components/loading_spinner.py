@@ -1,4 +1,4 @@
-"""StudioFace Loading Spinner — Centered spinner with optional message."""
+"""StudioFace Loading Spinner — Gold spinner on dark background."""
 
 import flet as ft
 
@@ -12,7 +12,7 @@ def build_loading_spinner(message: str = "") -> ft.Control:
             width=48,
             height=48,
             stroke_width=3,
-            color=T.PRIMARY,
+            color=T.PRIMARY_CONTAINER,
         ),
     ]
 
@@ -33,7 +33,8 @@ def build_loading_spinner(message: str = "") -> ft.Control:
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=T.SPACE_MD,
         ),
-        alignment=ft.alignment.center,
+        alignment=ft.Alignment.CENTER,
         expand=True,
         padding=ft.padding.all(T.SPACE_XXL),
+        bgcolor=T.BG_PRIMARY,
     )

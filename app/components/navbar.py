@@ -1,4 +1,4 @@
-"""StudioFace Navigation Bar — Top bar with logo, nav links, auth controls."""
+"""StudioFace Navigation Bar — Dark premium navbar matching production."""
 
 import flet as ft
 
@@ -6,16 +6,9 @@ from app.components.language_picker import build_language_picker
 from app.i18n import t
 from app.theme import StudioFaceTheme as T
 
-# Route mapping for nav links
-_NAV_LINKS = [
-    ("nav.home", "/"),
-    ("nav.create", "/create"),
-    ("nav.gallery", "/gallery"),
-]
-
 
 def build_navbar(page: ft.Page) -> ft.Control:
-    """Build top navigation bar with logo, links, language picker, and auth."""
+    """Build dark premium top navigation bar."""
     lang = page.session.store.get("lang") or "en"
     user = page.session.store.get("user")
     current_route = page.route or "/"
@@ -32,90 +25,103 @@ def build_navbar(page: ft.Page) -> ft.Control:
     def sign_in(e):
         page.go("/login")
 
-    # Logo
+    # Logo: orange square icon + "STUDIOFACE" bold white
     logo = ft.TextButton(
-        content=ft.Text(
-            "StudioFace",
-            size=T.FONT_H3,
-            weight=ft.FontWeight.BOLD,
-            color=T.PRIMARY,
+        content=ft.Row(
+            controls=[
+                ft.Container(
+                    content=ft.Icon(
+                        ft.Icons.SQUARE_ROUNDED,
+                        color=T.PRIMARY_CONTAINER,
+                        size=24,
+                    ),
+                    width=32,
+                    height=32,
+                    bgcolor=T.PRIMARY_CONTAINER,
+                    border_radius=6,
+                    alignment=ft.Alignment.CENTER,
+                ),
+                ft.Text(
+                    "STUDIOFACE",
+                    size=T.FONT_BODY,
+                    weight=ft.FontWeight.BOLD,
+                    color=T.TEXT_WHITE,
+                ),
+            ],
+            spacing=T.SPACE_SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         on_click=navigate("/"),
     )
 
-    # Desktop nav links
-    nav_links = []
-    for key, route in _NAV_LINKS:
-        is_active = current_route == route
-        nav_links.append(
-            ft.TextButton(
-                content=ft.Text(
-                    t(key, lang),
-                    size=T.FONT_BODY,
-                    weight=ft.FontWeight.W600 if is_active else ft.FontWeight.W400,
-                    color=T.SECONDARY if is_active else T.TEXT_SECONDARY,
-                ),
-                on_click=navigate(route),
-            )
-        )
+    # Right side: "My Headshots" link
+    gallery_link = ft.TextButton(
+        content=ft.Text(
+            t("nav.gallery", lang),
+            size=T.FONT_CAPTION,
+            color=T.TEXT_SECONDARY,
+        ),
+        on_click=navigate("/gallery"),
+    )
 
     # Language picker
     lang_picker = build_language_picker(page)
 
-    # Auth section
+    # Avatar circle
     if user:
         user_email = user.get("email", "") if isinstance(user, dict) else str(user)
-        auth_section = ft.Row(
-            spacing=T.SPACE_SM,
-            controls=[
-                ft.Text(
-                    user_email,
-                    size=T.FONT_CAPTION,
-                    color=T.TEXT_SECONDARY,
-                    max_lines=1,
-                    overflow=ft.TextOverflow.ELLIPSIS,
-                    width=120,
-                ),
-                ft.OutlinedButton(
-                    text=t("nav.logout", lang),
-                    on_click=sign_out,
-                    style=ft.ButtonStyle(
-                        color=T.TEXT_SECONDARY,
-                        side=ft.BorderSide(1, T.OUTLINE),
-                        shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
-                    ),
-                ),
-            ],
-        )
+        avatar_letter = user_email[0].upper() if user_email else "U"
     else:
-        auth_section = ft.ElevatedButton(
-            text=t("nav.login", lang),
-            on_click=sign_in,
-            bgcolor=T.PRIMARY,
-            color=T.TEXT_ON_PRIMARY,
-            style=ft.ButtonStyle(
-                shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
-            ),
-        )
+        avatar_letter = "U"
+
+    avatar = ft.Container(
+        content=ft.Text(
+            avatar_letter,
+            size=T.FONT_CAPTION,
+            weight=ft.FontWeight.BOLD,
+            color=T.ON_PRIMARY,
+            text_align=ft.TextAlign.CENTER,
+        ),
+        width=36,
+        height=36,
+        bgcolor=T.PRIMARY_CONTAINER,
+        border_radius=18,
+        alignment=ft.Alignment.CENTER,
+        on_click=sign_in if not user else sign_out,
+    )
 
     # Mobile hamburger menu
-    mobile_menu_items = []
-    for key, route in _NAV_LINKS:
-        mobile_menu_items.append(
-            ft.PopupMenuItem(
-                content=ft.Text(
-                    t(key, lang),
-                    color=T.SECONDARY if current_route == route else T.TEXT_PRIMARY,
-                    weight=ft.FontWeight.W600 if current_route == route else ft.FontWeight.W400,
-                ),
-                on_click=navigate(route),
+    mobile_menu_items = [
+        ft.PopupMenuItem(
+            content=ft.Text(
+                t("nav.home", lang),
+                color=T.PRIMARY if current_route == "/" else T.TEXT_PRIMARY,
+                weight=ft.FontWeight.W_600 if current_route == "/" else ft.FontWeight.W_400,
             ),
-        )
-    mobile_menu_items.append(ft.PopupMenuItem())  # divider
+            on_click=navigate("/"),
+        ),
+        ft.PopupMenuItem(
+            content=ft.Text(
+                t("nav.create", lang),
+                color=T.PRIMARY if current_route == "/create" else T.TEXT_PRIMARY,
+                weight=ft.FontWeight.W_600 if current_route == "/create" else ft.FontWeight.W_400,
+            ),
+            on_click=navigate("/create"),
+        ),
+        ft.PopupMenuItem(
+            content=ft.Text(
+                t("nav.gallery", lang),
+                color=T.PRIMARY if current_route.startswith("/gallery") else T.TEXT_PRIMARY,
+                weight=ft.FontWeight.W_600 if current_route.startswith("/gallery") else ft.FontWeight.W_400,
+            ),
+            on_click=navigate("/gallery"),
+        ),
+        ft.PopupMenuItem(),  # divider
+    ]
     if user:
         mobile_menu_items.append(
             ft.PopupMenuItem(
-                content=ft.Text(t("nav.logout", lang), color=T.TEXT_PRIMARY),
+                content=ft.Text(t("nav.logout", lang), color=T.TEXT_SECONDARY),
                 on_click=sign_out,
             ),
         )
@@ -133,14 +139,14 @@ def build_navbar(page: ft.Page) -> ft.Control:
         items=mobile_menu_items,
     )
 
-    # Desktop layout: logo | nav links | lang picker + auth
+    # Desktop layout
     desktop_row = ft.Row(
         controls=[
             logo,
-            ft.Row(controls=nav_links, spacing=T.SPACE_XS),
             ft.Row(
-                controls=[lang_picker, auth_section],
+                controls=[gallery_link, lang_picker, avatar],
                 spacing=T.SPACE_MD,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -148,13 +154,14 @@ def build_navbar(page: ft.Page) -> ft.Control:
         expand=True,
     )
 
-    # Mobile layout: logo | hamburger
+    # Mobile layout
     mobile_row = ft.Row(
         controls=[
             logo,
             ft.Row(
                 controls=[lang_picker, hamburger],
                 spacing=T.SPACE_XS,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -162,10 +169,8 @@ def build_navbar(page: ft.Page) -> ft.Control:
         expand=True,
     )
 
-    # Determine which layout to show based on page width
     page_width = page.width or 800
     is_mobile = page_width < T.MOBILE_MAX
-
     content_row = mobile_row if is_mobile else desktop_row
 
     return ft.Container(
@@ -177,7 +182,7 @@ def build_navbar(page: ft.Page) -> ft.Control:
             ),
             width=T.MAX_WIDTH,
         ),
-        bgcolor=T.SURFACE,
-        border=ft.border.only(bottom=ft.BorderSide(1, T.DIVIDER)),
-        alignment=ft.alignment.center,
+        bgcolor=T.BG_PRIMARY,
+        height=T.NAV_HEIGHT,
+        alignment=ft.Alignment.CENTER,
     )

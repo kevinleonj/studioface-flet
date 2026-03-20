@@ -1,4 +1,10 @@
-"""StudioFace Upload Zone — Dashed-border file upload area with file chips."""
+"""StudioFace Upload Zone — Dark premium dashed-border file upload area.
+
+Flet 0.82: FilePicker.pick_files() is async. We use page.run_task() to call
+it from synchronous click handlers and invoke a callback with the results.
+"""
+
+from typing import Callable, Optional
 
 import flet as ft
 
@@ -10,22 +16,30 @@ def build_upload_zone(
     page: ft.Page,
     file_picker: ft.FilePicker,
     uploaded_files: list,
-    on_remove_file,
+    on_remove_file: Callable[[int], None],
     lang: str = "en",
+    on_files_picked: Optional[Callable[[list], None]] = None,
 ) -> ft.Control:
-    """Build a file upload zone with dashed border, instructions, and file chips."""
+    """Build a dark file upload zone with dashed border."""
 
-    def pick_files(e):
-        file_picker.pick_files(
-            allow_multiple=True,
-            allowed_extensions=["jpg", "jpeg", "png"],
-            dialog_title=t("create.upload_button", lang),
-        )
+    def pick_files_click(e):
+        """Trigger async file picker from a sync click handler via page.run_task."""
+        async def do_pick():
+            result = await file_picker.pick_files(
+                allow_multiple=True,
+                allowed_extensions=["jpg", "jpeg", "png"],
+                dialog_title=t("create.upload_button", lang),
+                file_type=ft.FilePickerFileType.CUSTOM,
+            )
+            if result and on_files_picked:
+                on_files_picked(result)
+
+        page.run_task(do_pick)
 
     # File chips showing uploaded file names
     file_chips = []
     for i, f in enumerate(uploaded_files):
-        file_name = f.name if hasattr(f, "name") else str(f)
+        file_name = f.get("name") if isinstance(f, dict) else (f.name if hasattr(f, "name") else str(f))
         file_chips.append(
             ft.Chip(
                 label=ft.Text(
@@ -35,21 +49,19 @@ def build_upload_zone(
                 ),
                 delete_icon=ft.Icons.CLOSE,
                 on_delete=lambda e, idx=i: on_remove_file(idx),
-                bgcolor=T.PRIMARY_CONTAINER,
+                bgcolor=T.BG_SURFACE_HIGH,
                 delete_icon_color=T.TEXT_SECONDARY,
             )
         )
 
-    # File count text
     file_count_text = ft.Text(
         t("create.uploaded_count", lang, count=len(uploaded_files)),
         size=T.FONT_CAPTION,
         color=T.PRIMARY,
-        weight=ft.FontWeight.W500,
+        weight=ft.FontWeight.W_500,
         visible=len(uploaded_files) > 0,
     )
 
-    # Chips row (wrapping)
     chips_row = ft.Row(
         controls=file_chips,
         wrap=True,
@@ -58,19 +70,18 @@ def build_upload_zone(
         visible=len(uploaded_files) > 0,
     )
 
-    # Upload zone content
     upload_content = ft.Column(
         controls=[
             ft.Icon(
                 ft.Icons.CAMERA_ALT_OUTLINED,
                 size=48,
-                color=T.TEXT_DISABLED,
+                color=T.TEXT_MUTED,
             ),
             ft.Text(
                 t("create.upload_title", lang),
                 size=T.FONT_H4,
-                weight=ft.FontWeight.W600,
-                color=T.TEXT_PRIMARY,
+                weight=ft.FontWeight.W_600,
+                color=T.TEXT_WHITE,
                 text_align=ft.TextAlign.CENTER,
             ),
             ft.Text(
@@ -81,11 +92,11 @@ def build_upload_zone(
             ),
             ft.Container(height=T.SPACE_SM),
             ft.ElevatedButton(
-                text=t("create.upload_button", lang),
+                t("create.upload_button", lang),
                 icon=ft.Icons.ADD_PHOTO_ALTERNATE_OUTLINED,
-                on_click=pick_files,
-                bgcolor=T.PRIMARY,
-                color=T.TEXT_ON_PRIMARY,
+                on_click=pick_files_click,
+                bgcolor=T.BUTTON_PRIMARY_BG,
+                color=T.BUTTON_TEXT,
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
                 ),
@@ -98,16 +109,14 @@ def build_upload_zone(
         spacing=T.SPACE_SM,
     )
 
-    # Dashed border container
-    # Flet doesn't support dashed borders natively, so we use a dotted visual
-    # approach with border + styling to approximate it
+    # Dashed border on dark BG_SURFACE
     return ft.Container(
         content=upload_content,
         padding=ft.padding.all(T.SPACE_XL),
         border=ft.border.all(2, T.OUTLINE),
         border_radius=T.RADIUS_MD,
-        bgcolor=T.SURFACE_VARIANT,
-        alignment=ft.alignment.center,
+        bgcolor=T.BG_SURFACE,
+        alignment=ft.Alignment.CENTER,
         ink=True,
-        on_click=pick_files,
+        on_click=pick_files_click,
     )

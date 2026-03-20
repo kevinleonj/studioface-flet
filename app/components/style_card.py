@@ -1,4 +1,4 @@
-"""StudioFace Style Card — Selectable card for headshot style picking."""
+"""StudioFace Style Card — Dark premium selectable card with real photos."""
 
 import flet as ft
 
@@ -22,51 +22,63 @@ def build_style_card(
     selected: bool,
     on_click,
 ) -> ft.Control:
-    """Build a selectable style card with colored band, icon, name, and description."""
+    """Build a dark selectable style card with real photo if available."""
     style_color = T.STYLE_COLORS.get(style_key, T.PRIMARY)
     icon_name = T.STYLE_ICONS.get(style_key, "computer")
     icon_value = _ICON_MAP.get(icon_name, ft.Icons.COMPUTER)
 
     style_name = t(f"style.{style_key}", lang)
     style_desc = t(f"style.{style_key}.desc", lang)
+    photo_url = T.STYLE_PHOTOS.get(style_key, "")
 
     # Border changes based on selection
     if selected:
-        card_border = ft.border.all(3, T.SECONDARY)
+        card_border = ft.border.all(3, T.PRIMARY_CONTAINER)
     else:
-        card_border = ft.border.all(1, T.OUTLINE_VARIANT)
+        card_border = ft.border.all(1, T.BORDER)
 
-    # Colored top band with icon
-    top_band = ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.Icon(
-                    icon_value,
-                    size=32,
-                    color=T.TEXT_ON_PRIMARY,
-                ),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            alignment=ft.MainAxisAlignment.CENTER,
-        ),
-        bgcolor=style_color,
-        height=80,
-        border_radius=ft.border_radius.only(
-            top_left=T.RADIUS_MD,
-            top_right=T.RADIUS_MD,
-        ),
-        alignment=ft.alignment.center,
-    )
+    # Image or colored top band
+    if photo_url:
+        top_band = ft.Container(
+            content=ft.Image(
+                src=photo_url,
+                fit=ft.BoxFit.COVER,
+                height=100,
+            ),
+            height=100,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            border_radius=ft.border_radius.only(
+                top_left=T.RADIUS_MD,
+                top_right=T.RADIUS_MD,
+            ),
+        )
+    else:
+        top_band = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Icon(icon_value, size=32, color=T.TEXT_WHITE),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+            bgcolor=style_color,
+            height=80,
+            border_radius=ft.border_radius.only(
+                top_left=T.RADIUS_MD,
+                top_right=T.RADIUS_MD,
+            ),
+            alignment=ft.Alignment.CENTER,
+        )
 
-    # Selection checkmark badge (overlaid on top-right)
+    # Selection checkmark badge
     checkmark = ft.Container(
         content=ft.Icon(
             ft.Icons.CHECK_CIRCLE,
             size=24,
-            color=T.SECONDARY,
+            color=T.PRIMARY_CONTAINER,
         ),
         visible=selected,
-        alignment=ft.alignment.top_right,
+        alignment=ft.Alignment.TOP_RIGHT,
         padding=ft.padding.all(T.SPACE_XS),
     )
 
@@ -78,7 +90,7 @@ def build_style_card(
                     style_name,
                     size=T.FONT_H4,
                     weight=ft.FontWeight.BOLD,
-                    color=T.TEXT_PRIMARY,
+                    color=T.TEXT_WHITE,
                 ),
                 ft.Text(
                     style_desc,
@@ -106,15 +118,8 @@ def build_style_card(
         ),
         border=card_border,
         border_radius=T.RADIUS_MD,
-        bgcolor=T.SURFACE,
+        bgcolor=T.BG_SURFACE,
         width=200,
         ink=True,
         on_click=on_click,
-        animate=ft.Animation(T.ANIM_FAST, ft.AnimationCurve.EASE_IN_OUT),
-        shadow=ft.BoxShadow(
-            spread_radius=0,
-            blur_radius=4 if selected else 2,
-            color=ft.Colors.with_opacity(0.15 if selected else 0.08, ft.Colors.BLACK),
-            offset=ft.Offset(0, 2),
-        ),
     )

@@ -1,4 +1,4 @@
-"""StudioFace Headshot Card — Display generated headshots with states."""
+"""StudioFace Headshot Card — Dark premium display for generated headshots."""
 
 import flet as ft
 
@@ -14,13 +14,11 @@ def build_headshot_card(
     error: bool = False,
     lang: str = "en",
 ) -> ft.Control:
-    """Build a headshot display card with loading, error, and loaded states."""
+    """Build a dark headshot display card with loading, error, and loaded states."""
     card_width = 240
     image_height = 280
 
-    # Determine content based on state
     if loading:
-        # Loading state: grey background with spinner
         image_area = ft.Container(
             content=ft.Column(
                 controls=[
@@ -28,7 +26,7 @@ def build_headshot_card(
                         width=40,
                         height=40,
                         stroke_width=3,
-                        color=T.PRIMARY,
+                        color=T.PRIMARY_CONTAINER,
                     ),
                     ft.Text(
                         t("common.loading", lang),
@@ -42,12 +40,11 @@ def build_headshot_card(
             ),
             width=card_width,
             height=image_height,
-            bgcolor=T.SURFACE_VARIANT,
+            bgcolor=T.BG_SURFACE_HIGH,
             border_radius=T.RADIUS_MD,
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment.CENTER,
         )
     elif error:
-        # Error state: grey background with error icon
         image_area = ft.Container(
             content=ft.Column(
                 controls=[
@@ -69,16 +66,15 @@ def build_headshot_card(
             ),
             width=card_width,
             height=image_height,
-            bgcolor=T.SURFACE_VARIANT,
+            bgcolor=T.BG_SURFACE_HIGH,
             border_radius=T.RADIUS_MD,
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment.CENTER,
         )
     else:
-        # Loaded state: display the image
         image_area = ft.Container(
             content=ft.Image(
                 src=image_url or "",
-                fit=ft.ImageFit.COVER,
+                fit=ft.BoxFit.COVER,
                 width=card_width,
                 height=image_height,
                 border_radius=T.RADIUS_MD,
@@ -97,9 +93,9 @@ def build_headshot_card(
         text_align=ft.TextAlign.CENTER,
     )
 
-    # Download button (only show when loaded and not error/loading)
+    # Download button
     download_button = ft.OutlinedButton(
-        text=t("gallery.download", lang),
+        t("gallery.download", lang),
         icon=ft.Icons.DOWNLOAD,
         on_click=on_download,
         visible=not loading and not error,

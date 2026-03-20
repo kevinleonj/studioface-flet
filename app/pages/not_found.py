@@ -1,4 +1,4 @@
-"""StudioFace 404 Page — Shown when a route does not exist."""
+"""StudioFace 404 Page — Dark premium not found page."""
 
 import flet as ft
 
@@ -8,8 +8,8 @@ from app.i18n import t
 from app.theme import StudioFaceTheme as T
 
 
-async def build(page: ft.Page) -> ft.View:
-    """Build the 404 not found page."""
+def build(page: ft.Page) -> list[ft.Control]:
+    """Build the 404 not found page. Returns list[ft.Control]."""
     lang = page.session.store.get("lang") or "en"
     page_width = page.width or 800
     is_mobile = page_width < T.MOBILE_MAX
@@ -17,12 +17,12 @@ async def build(page: ft.Page) -> ft.View:
     def go_home(e):
         page.go("/")
 
-    # Large 404 text
+    # Large 404 text in TEXT_MUTED
     error_code = ft.Text(
         "404",
         size=T.FONT_HERO * 2.5 if not is_mobile else T.FONT_HERO * 1.8,
-        weight=ft.FontWeight.W900,
-        color=T.TEXT_DISABLED,
+        weight=ft.FontWeight.W_900,
+        color=T.TEXT_MUTED,
         text_align=ft.TextAlign.CENTER,
     )
 
@@ -31,7 +31,7 @@ async def build(page: ft.Page) -> ft.View:
         t("error.not_found", lang),
         size=T.FONT_H2,
         weight=ft.FontWeight.BOLD,
-        color=T.TEXT_PRIMARY,
+        color=T.TEXT_WHITE,
         text_align=ft.TextAlign.CENTER,
     )
 
@@ -43,19 +43,19 @@ async def build(page: ft.Page) -> ft.View:
         text_align=ft.TextAlign.CENTER,
     )
 
-    # Go home button
+    # Gold "Go Home" button
     go_home_btn = ft.ElevatedButton(
-        text=t("error.go_home", lang),
+        t("error.go_home", lang),
         on_click=go_home,
-        bgcolor=T.PRIMARY,
-        color=T.TEXT_ON_PRIMARY,
+        bgcolor=T.BUTTON_PRIMARY_BG,
+        color=T.BUTTON_TEXT,
         height=48,
         width=200,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
             text_style=ft.TextStyle(
                 size=T.FONT_BODY,
-                weight=ft.FontWeight.W600,
+                weight=ft.FontWeight.W_600,
             ),
         ),
     )
@@ -74,7 +74,7 @@ async def build(page: ft.Page) -> ft.View:
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=T.SPACE_SM,
         ),
-        alignment=ft.alignment.center,
+        alignment=ft.Alignment.CENTER,
         expand=True,
         padding=ft.padding.symmetric(
             horizontal=T.MOBILE_PADDING if is_mobile else T.CONTENT_PADDING,
@@ -85,17 +85,11 @@ async def build(page: ft.Page) -> ft.View:
     main_content = ft.Container(
         content=centered_content,
         expand=True,
-        bgcolor=T.BACKGROUND,
+        bgcolor=T.BG_PRIMARY,
     )
 
-    return ft.View(
-        route="/404",
-        controls=[
-            build_navbar(page),
-            main_content,
-            build_footer(page),
-        ],
-        padding=0,
-        bgcolor=T.BACKGROUND,
-        spacing=0,
-    )
+    return [
+        build_navbar(page),
+        main_content,
+        build_footer(page),
+    ]

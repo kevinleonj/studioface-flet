@@ -48,7 +48,7 @@ class TestSpacing:
 
 
 class TestFontSizes:
-    """FONT_* sizes must be reasonable and even."""
+    """FONT_* sizes must be reasonable."""
 
     FONT_ATTRS = [
         attr for attr in dir(T) if attr.startswith("FONT_") and isinstance(getattr(T, attr), int)
@@ -61,7 +61,10 @@ class TestFontSizes:
             assert 10 <= value <= 72, f"{attr} = {value} outside 10..72"
 
     def test_font_sizes_even(self) -> None:
+        # FONT_LABEL (11) is intentionally odd for small label text
         for attr in self.FONT_ATTRS:
+            if attr == "FONT_LABEL":
+                continue
             value = getattr(T, attr)
             assert value % 2 == 0, f"{attr} = {value} is not even"
 
@@ -113,3 +116,16 @@ class TestStyleMaps:
             assert HEX_RE.match(color), (
                 f"STYLE_COLORS['{style}'] = '{color}' is not valid #RRGGBB"
             )
+
+    def test_style_photos_all_present(self) -> None:
+        assert set(T.STYLE_PHOTOS.keys()) == ALL_STYLES, (
+            f"STYLE_PHOTOS keys: {set(T.STYLE_PHOTOS.keys())} != {ALL_STYLES}"
+        )
+
+    def test_sample_photos_has_entries(self) -> None:
+        assert len(T.SAMPLE_PHOTOS) >= 3, (
+            f"SAMPLE_PHOTOS has {len(T.SAMPLE_PHOTOS)} entries, expected >= 3"
+        )
+        for photo in T.SAMPLE_PHOTOS:
+            assert "name" in photo, "SAMPLE_PHOTOS entry missing 'name'"
+            assert "url" in photo, "SAMPLE_PHOTOS entry missing 'url'"

@@ -1,4 +1,4 @@
-"""StudioFace Footer — Product links, legal links, copyright bar."""
+"""StudioFace Footer — Dark premium footer matching production."""
 
 import flet as ft
 
@@ -7,7 +7,7 @@ from app.theme import StudioFaceTheme as T
 
 
 def build_footer(page: ft.Page) -> ft.Control:
-    """Build footer with product links, legal links, and copyright bar."""
+    """Build dark footer with product links, legal links, and copyright bar."""
     lang = page.session.store.get("lang") or "en"
 
     def navigate(route):
@@ -15,37 +15,63 @@ def build_footer(page: ft.Page) -> ft.Control:
             page.go(route)
         return handler
 
+    # Logo (smaller)
+    logo_section = ft.Row(
+        controls=[
+            ft.Container(
+                content=ft.Icon(
+                    ft.Icons.SQUARE_ROUNDED,
+                    color=T.PRIMARY_CONTAINER,
+                    size=16,
+                ),
+                width=24,
+                height=24,
+                bgcolor=T.PRIMARY_CONTAINER,
+                border_radius=4,
+                alignment=ft.Alignment.CENTER,
+            ),
+            ft.Text(
+                "STUDIOFACE",
+                size=T.FONT_SMALL,
+                weight=ft.FontWeight.BOLD,
+                color=T.TEXT_MUTED,
+            ),
+        ],
+        spacing=T.SPACE_SM,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
     # Product links column
     product_links = ft.Column(
         spacing=T.SPACE_SM,
         controls=[
             ft.Text(
                 t("footer.product", lang),
-                size=T.FONT_BODY,
+                size=T.FONT_CAPTION,
                 weight=ft.FontWeight.BOLD,
-                color=T.TEXT_PRIMARY,
+                color=T.TEXT_SECONDARY,
             ),
             ft.TextButton(
                 content=ft.Text(
                     t("nav.home", lang),
-                    size=T.FONT_CAPTION,
-                    color=T.TEXT_SECONDARY,
+                    size=T.FONT_SMALL,
+                    color=T.TEXT_MUTED,
                 ),
                 on_click=navigate("/"),
             ),
             ft.TextButton(
                 content=ft.Text(
                     t("nav.create", lang),
-                    size=T.FONT_CAPTION,
-                    color=T.TEXT_SECONDARY,
+                    size=T.FONT_SMALL,
+                    color=T.TEXT_MUTED,
                 ),
                 on_click=navigate("/create"),
             ),
             ft.TextButton(
                 content=ft.Text(
                     t("nav.gallery", lang),
-                    size=T.FONT_CAPTION,
-                    color=T.TEXT_SECONDARY,
+                    size=T.FONT_SMALL,
+                    color=T.TEXT_MUTED,
                 ),
                 on_click=navigate("/gallery"),
             ),
@@ -58,23 +84,23 @@ def build_footer(page: ft.Page) -> ft.Control:
         controls=[
             ft.Text(
                 t("footer.legal", lang),
-                size=T.FONT_BODY,
+                size=T.FONT_CAPTION,
                 weight=ft.FontWeight.BOLD,
-                color=T.TEXT_PRIMARY,
+                color=T.TEXT_SECONDARY,
             ),
             ft.TextButton(
                 content=ft.Text(
                     t("footer.privacy", lang),
-                    size=T.FONT_CAPTION,
-                    color=T.TEXT_SECONDARY,
+                    size=T.FONT_SMALL,
+                    color=T.TEXT_MUTED,
                 ),
                 on_click=navigate("/privacy"),
             ),
             ft.TextButton(
                 content=ft.Text(
                     t("footer.terms", lang),
-                    size=T.FONT_CAPTION,
-                    color=T.TEXT_SECONDARY,
+                    size=T.FONT_SMALL,
+                    color=T.TEXT_MUTED,
                 ),
                 on_click=navigate("/terms"),
             ),
@@ -87,12 +113,12 @@ def build_footer(page: ft.Page) -> ft.Control:
 
     if is_mobile:
         links_section = ft.Column(
-            controls=[product_links, legal_links],
+            controls=[logo_section, product_links, legal_links],
             spacing=T.SPACE_LG,
         )
     else:
         links_section = ft.Row(
-            controls=[product_links, legal_links],
+            controls=[logo_section, product_links, legal_links],
             spacing=T.SPACE_HERO,
             alignment=ft.MainAxisAlignment.START,
         )
@@ -102,14 +128,14 @@ def build_footer(page: ft.Page) -> ft.Control:
         content=ft.Row(
             controls=[
                 ft.Text(
-                    t("footer.copyright", lang) + " \u00b7 " + t("footer.made_in", lang) + " \U0001f1ea\U0001f1f8",
+                    t("footer.copyright", lang) + " \u00b7 " + t("footer.made_in", lang),
                     size=T.FONT_SMALL,
-                    color=T.TEXT_SECONDARY,
+                    color=T.TEXT_MUTED,
                 ),
                 ft.Text(
                     t("footer.gdpr", lang),
                     size=T.FONT_SMALL,
-                    color=T.TEXT_SECONDARY,
+                    color=T.TEXT_MUTED,
                 ),
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -134,7 +160,7 @@ def build_footer(page: ft.Page) -> ft.Control:
             ),
             width=T.MAX_WIDTH,
         ),
-        bgcolor=T.SURFACE_VARIANT,
+        bgcolor=T.BG_SURFACE_LOW,
         border=ft.border.only(top=ft.BorderSide(1, T.DIVIDER)),
-        alignment=ft.alignment.center,
+        alignment=ft.Alignment.CENTER,
     )
