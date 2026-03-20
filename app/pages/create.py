@@ -127,7 +127,8 @@ def build(page: ft.Page) -> list[ft.Control]:
         "upload_ids": [],
     }
 
-    # --- File picker setup (Flet 0.82 async API) ---
+    # --- File picker setup (Flet 0.82: FilePicker is a Service, not a Control) ---
+    # Created here but auto-registers via Service.init() with the page context.
     file_picker = ft.FilePicker()
 
     def on_pick_files_click(e):
@@ -180,7 +181,7 @@ def build(page: ft.Page) -> list[ft.Control]:
 
         page.run_task(do_pick)
 
-    page.overlay.append(file_picker)
+    # FilePicker auto-registers as a Service — no overlay needed
 
     # --- Navigation handlers ---
     def go_next(e):
