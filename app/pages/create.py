@@ -214,33 +214,49 @@ def build(page: ft.Page) -> list[ft.Control]:
         """Switch to camera mode. Camera must be visible BEFORE enumerating."""
         import asyncio
 
+        print("[CAM] on_camera_mode called", flush=True)
         state["upload_mode"] = "camera"
         state["validation_error"] = None
         _rebuild_step()
 
-        if not camera_preview or state["camera_ready"]:
+        if not camera_preview:
+            print("[CAM] camera_preview is None — flet_camera not available", flush=True)
+            return
+        if state["camera_ready"]:
+            print("[CAM] camera already ready, skipping init", flush=True)
             return
 
         async def init_cam():
             try:
                 # Step 1: Make camera visible + update page so browser renders it
+                print("[CAM] Step 1: making camera visible, calling page.update()", flush=True)
                 camera_preview.visible = True
                 if camera_container_ref.current:
                     camera_container_ref.current.visible = True
+                    print(f"[CAM]   camera_container visible={camera_container_ref.current.visible}", flush=True)
+                else:
+                    print("[CAM]   WARNING: camera_container_ref.current is None", flush=True)
                 if camera_status_ref.current:
                     camera_status_ref.current.value = t("create.camera_initializing", lang)
                     camera_status_ref.current.visible = True
                 page.update()
+                print("[CAM]   page.update() done", flush=True)
 
                 # Step 2: Wait for the Flutter widget to mount in the browser
-                await asyncio.sleep(1.0)
+                print("[CAM] Step 2: sleeping 1.5s for widget mount...", flush=True)
+                await asyncio.sleep(1.5)
+                print("[CAM]   sleep done", flush=True)
 
                 # Step 3: NOW enumerate cameras (talks to browser over WS)
+                print("[CAM] Step 3: calling get_available_cameras()...", flush=True)
                 cams = await camera_preview.get_available_cameras()
-                print(f"[CAMERA] Found {len(cams)} cameras: {[c.name for c in cams]}", flush=True)
+                print(f"[CAM]   get_available_cameras returned {len(cams)} cameras:", flush=True)
+                for i, c in enumerate(cams):
+                    print(f"[CAM]     [{i}] name={c.name} direction={c.lens_direction} lens={getattr(c, 'lens_type', '?')}", flush=True)
                 state["cameras"] = cams
 
                 if not cams:
+                    print("[CAM]   NO cameras found — showing error", flush=True)
                     state["camera_ready"] = False
                     state["validation_error"] = t("create.camera_not_available", lang)
                     camera_preview.visible = False
@@ -254,20 +270,17 @@ def build(page: ft.Page) -> list[ft.Control]:
                 initial = front[0] if front else cams[0]
                 state["current_camera_idx"] = cams.index(initial)
 
+                print(f"[CAM] Step 4: calling initialize(description={initial.name}, preset=HIGH)...", flush=True)
                 await camera_preview.initialize(
                     description=initial,
                     resolution_preset=fc.ResolutionPreset.HIGH,
                 )
-                print(f"[CAMERA] Initialized: {initial.name}", flush=True)
+                print(f"[CAM]   initialize() completed OK", flush=True)
 
                 state["camera_ready"] = True
-                if camera_status_ref.current:
-                    camera_status_ref.current.visible = False
-                if flip_btn_ref.current:
-                    flip_btn_ref.current.visible = len(cams) > 1
-                if capture_btn_ref.current:
-                    capture_btn_ref.current.disabled = False
-                page.update()
+                print("[CAM]   calling _rebuild_step() to show capture/flip buttons", flush=True)
+                _rebuild_step()
+                print("[CAM]   camera is live with buttons", flush=True)
 
             except Exception as ex:
                 print(f"[CAMERA ERROR] {ex}", flush=True)
@@ -290,12 +303,15 @@ def build(page: ft.Page) -> list[ft.Control]:
 
     def on_flip_camera(e):
         """Switch between front and back camera."""
+        print("[CAM] flip button clicked", flush=True)
         if not state["cameras"] or len(state["cameras"]) < 2:
+            print("[CAM]   only 1 camera, nothing to flip", flush=True)
             return
 
         async def do_flip():
             idx = (state["current_camera_idx"] + 1) % len(state["cameras"])
             state["current_camera_idx"] = idx
+            print(f"[CAM]   flipping to camera[{idx}]: {state['cameras'][idx].name}", flush=True)
             await camera_preview.initialize(
                 description=state["cameras"][idx],
                 resolution_preset=fc.ResolutionPreset.HIGH,
@@ -306,6 +322,7 @@ def build(page: ft.Page) -> list[ft.Control]:
 
     def on_capture(e):
         """Capture a photo from the camera."""
+        print("[CAM] capture button clicked", flush=True)
         if len(state["selected_files"]) >= 5:
             state["validation_error"] = t("create.max_photos", lang)
             _rebuild_step()
