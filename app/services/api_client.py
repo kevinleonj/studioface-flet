@@ -128,7 +128,9 @@ class StudioFaceAPI:
         return await self._request("POST", "/auth/magic-link", json_data={"email": email})
 
     async def verify_token(self, token: str) -> dict[str, Any]:
-        return await self._request("POST", "/auth/verify", json_data={"token": token})
+        return await self._request(
+            "POST", "/auth/magic-link/verify", json_data={"token": token}
+        )
 
     async def get_microsoft_auth_url(self) -> dict[str, Any]:
         return await self._request("GET", "/auth/microsoft/url")
@@ -136,18 +138,13 @@ class StudioFaceAPI:
     async def get_current_user(self) -> dict[str, Any]:
         return await self._request("GET", "/auth/me")
 
-    # --- Upload ---
-    async def create_upload_session(self) -> dict[str, Any]:
-        return await self._request("POST", "/upload/session")
-
-    async def upload_file(
-        self, session_id: str, file_bytes: bytes, filename: str
-    ) -> dict[str, Any]:
+    async def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         return await self._request(
-            "POST",
-            f"/upload/{session_id}",
-            files={"file": (filename, file_bytes)},
+            "POST", "/auth/refresh", json_data={"refresh_token": refresh_token}
         )
+
+    async def logout(self) -> dict[str, Any]:
+        return await self._request("POST", "/auth/logout")
 
     # --- Generations ---
     async def create_generation(
@@ -169,6 +166,15 @@ class StudioFaceAPI:
     async def get_generation_images(self, generation_id: str) -> dict[str, Any]:
         return await self._request("GET", f"/generations/{generation_id}/images")
 
+    async def get_generation_status(self, generation_id: str) -> dict[str, Any]:
+        return await self._request("GET", "/generations/status", params={"id": generation_id})
+
+    async def download_generation(self, generation_id: str) -> dict[str, Any]:
+        return await self._request("GET", "/generations/download", params={"id": generation_id})
+
+    async def get_generation_history(self) -> dict[str, Any]:
+        return await self._request("GET", "/generations/history")
+
     async def list_generations(self) -> dict[str, Any]:
         return await self._request("GET", "/generations/")
 
@@ -176,6 +182,15 @@ class StudioFaceAPI:
     async def create_checkout(self, generation_id: str) -> dict[str, Any]:
         return await self._request(
             "POST",
-            "/checkout/",
+            "/payments/create-checkout",
             json_data={"generation_id": generation_id},
         )
+
+    async def get_payment_plans(self) -> dict[str, Any]:
+        return await self._request("GET", "/payments/plans")
+
+    async def get_payment_history(self) -> dict[str, Any]:
+        return await self._request("GET", "/payments/history")
+
+    async def get_credits(self) -> dict[str, Any]:
+        return await self._request("GET", "/payments/credits")

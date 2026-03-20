@@ -2,22 +2,22 @@
 
 Base URL: `https://api.studioface.app/api/v1`
 
-All endpoints return JSON. Errors follow the format:
+**Framework:** FastAPI on uvicorn with Pydantic validation.
+
+All endpoints return JSON. Two error formats exist:
 
 ```json
-{
-  "detail": "Error message describing what went wrong"
-}
+// FastAPI default
+{"detail": "Error message"}
+
+// Custom error format
+{"error": {"code": "ERROR_CODE", "message": "Description", "details": {}}}
 ```
 
 The Flet client normalizes errors into:
 
 ```json
-{
-  "error": "...",
-  "code": "...",
-  "status": 400
-}
+{"error": "...", "code": "...", "status": 400}
 ```
 
 ---
@@ -26,20 +26,11 @@ The Flet client normalizes errors into:
 
 ### `GET /health/`
 
-Check whether the backend API is reachable and operational.
+| Field | Value |
+|-------|-------|
+| Auth  | No    |
 
-| Field        | Value            |
-|--------------|------------------|
-| Auth         | No               |
-| Request Body | None             |
-
-**Response:**
-
-```json
-{
-  "status": "ok"
-}
-```
+**Response:** `{"status": "ok", "timestamp": "2026-03-20T..."}`
 
 ---
 
@@ -47,50 +38,29 @@ Check whether the backend API is reachable and operational.
 
 ### `POST /auth/magic-link`
 
-Send a magic-link sign-in email to the given address.
+Send a magic-link sign-in email.
 
-| Field        | Value            |
-|--------------|------------------|
-| Auth         | No               |
-| Content-Type | application/json |
+| Field | Value |
+|-------|-------|
+| Auth  | No    |
 
-**Request Body:**
+**Request:** `{"email": "user@example.com"}`
 
-```json
-{
-  "email": "user@example.com"
-}
-```
-
-**Response (success):**
-
-```json
-{
-  "message": "Magic link sent",
-  "email": "user@example.com"
-}
-```
+**Response:** `{"message": "Magic link sent", "email": "user@example.com"}`
 
 ---
 
-### `POST /auth/verify`
+### `POST /auth/magic-link/verify`
 
-Verify a magic-link or OAuth token and return user data.
+Verify a magic-link token (min 32 chars) and return auth tokens.
 
-| Field        | Value            |
-|--------------|------------------|
-| Auth         | No               |
-| Content-Type | application/json |
+| Field | Value |
+|-------|-------|
+| Auth  | No    |
 
-**Request Body:**
+**Request:** `{"token": "eyJhbGciOiJIUzI1NiIs..."}`
 
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
-
-**Response (success):**
+**Response:**
 
 ```json
 {
@@ -101,28 +71,27 @@ Verify a magic-link or OAuth token and return user data.
 }
 ```
 
-The client stores the returned token in `client_storage` and attaches it as a `Bearer` header on subsequent requests.
+The client stores the returned token in session and attaches it as a `Bearer` header on subsequent requests.
 
 ---
 
 ### `GET /auth/microsoft/url`
 
-Get the Microsoft OAuth authorization URL for redirect-based sign-in.
+Get the Microsoft OAuth authorization URL.
 
-| Field        | Value            |
-|--------------|------------------|
-| Auth         | No               |
-| Request Body | None             |
+| Field | Value |
+|-------|-------|
+| Auth  | No    |
 
-**Response:**
+**Response:** `{"url": "https://login.microsoftonline.com/..."}`
 
-```json
-{
-  "url": "https://login.microsoftonline.com/..."
-}
-```
+Microsoft OAuth client_id: `f62453e4-de16-48f6-a9fe-efd592b4e5f1`
 
-The client opens this URL in the browser via `page.launch_url_async()`.
+---
+
+### `GET /auth/microsoft/callback`
+
+OAuth callback (returns 302 redirect). Expects `code` and `state` query params.
 
 ---
 
@@ -130,100 +99,51 @@ The client opens this URL in the browser via `page.launch_url_async()`.
 
 Get the currently authenticated user's profile.
 
-| Field        | Value                          |
-|--------------|--------------------------------|
-| Auth         | Yes — `Bearer <token>` header  |
-| Request Body | None                           |
+| Field | Value |
+|-------|-------|
+| Auth  | Yes — `Bearer <token>` |
 
-**Response (success):**
+**Response:** `{"id": "uuid", "email": "user@example.com", "name": "User Name"}`
 
-```json
-{
-  "id": "uuid",
-  "email": "user@example.com",
-  "name": "User Name"
-}
-```
-
-**Response (401):**
-
-```json
-{
-  "detail": "Not authenticated"
-}
-```
+**401:** `{"detail": "Not authenticated"}`
 
 ---
 
-## Upload
+### `POST /auth/refresh`
 
-### `POST /upload/session`
+Refresh an expired access token.
 
-Create a new upload session. A session groups multiple photo uploads together.
+| Field | Value |
+|-------|-------|
+| Auth  | No    |
 
-| Field        | Value                          |
-|--------------|--------------------------------|
-| Auth         | Yes — `Bearer <token>` header  |
-| Request Body | None                           |
-
-**Response:**
-
-```json
-{
-  "session_id": "uuid",
-  "created_at": "2026-03-20T12:00:00Z"
-}
-```
+**Request:** `{"refresh_token": "..."}`
 
 ---
 
-### `POST /upload/{session_id}`
+### `POST /auth/logout`
 
-Upload a single photo file to an existing upload session.
+Log out the current user.
 
-| Field        | Value                          |
-|--------------|--------------------------------|
-| Auth         | Yes — `Bearer <token>` header  |
-| Content-Type | multipart/form-data            |
-
-**Request Body (multipart):**
-
-| Field  | Type   | Description                       |
-|--------|--------|-----------------------------------|
-| `file` | binary | JPG or PNG image, max 10 MB       |
-
-**Response:**
-
-```json
-{
-  "id": "uuid",
-  "filename": "selfie1.jpg",
-  "session_id": "uuid",
-  "uploaded_at": "2026-03-20T12:00:05Z"
-}
-```
-
-**Constraints (enforced client-side):**
-
-- Allowed formats: `.jpg`, `.jpeg`, `.png`
-- Max file size: 10 MB per file
-- Min files per session: 2
-- Max files per session: 5
+| Field | Value |
+|-------|-------|
+| Auth  | Yes — `Bearer <token>` |
 
 ---
 
 ## Generations
 
+> **Note:** No separate `/upload/` or `/styles/` endpoints exist on the backend (both return 404). Upload and style selection are handled within the generations flow.
+
 ### `POST /generations/`
 
-Create a new headshot generation job. This triggers the AI pipeline on the backend.
+Create a new headshot generation job.
 
-| Field        | Value                          |
-|--------------|--------------------------------|
-| Auth         | Yes — `Bearer <token>` header  |
-| Content-Type | application/json               |
+| Field | Value |
+|-------|-------|
+| Auth  | Yes — `Bearer <token>` |
 
-**Request Body:**
+**Request:**
 
 ```json
 {
@@ -233,23 +153,12 @@ Create a new headshot generation job. This triggers the AI pipeline on the backe
 }
 ```
 
-| Parameter           | Type   | Values                                                          |
-|---------------------|--------|-----------------------------------------------------------------|
-| `upload_session_id` | string | UUID from the upload session                                    |
-| `style`             | string | `corporate`, `medical`, `banking`, `startup`, `casual`, `tech`  |
-| `presentation`      | string | `masculine`, `feminine`                                         |
+| Parameter | Values |
+|-----------|--------|
+| `style` | `corporate`, `medical`, `banking`, `startup`, `casual`, `tech` |
+| `presentation` | `masculine`, `feminine` |
 
-**Response:**
-
-```json
-{
-  "id": "uuid",
-  "status": "pending",
-  "style": "corporate",
-  "presentation": "masculine",
-  "created_at": "2026-03-20T12:01:00Z"
-}
-```
+**Response:** `{"id": "uuid", "status": "pending", "style": "corporate", ...}`
 
 ---
 
@@ -257,107 +166,72 @@ Create a new headshot generation job. This triggers the AI pipeline on the backe
 
 List all generations for the authenticated user.
 
-| Field        | Value                          |
-|--------------|--------------------------------|
-| Auth         | Yes — `Bearer <token>` header  |
-| Request Body | None                           |
-
-**Response:**
-
-```json
-[
-  {
-    "id": "uuid",
-    "status": "completed",
-    "style": "corporate",
-    "presentation": "masculine",
-    "created_at": "2026-03-20T12:01:00Z"
-  }
-]
-```
+| Field | Value |
+|-------|-------|
+| Auth  | Yes — `Bearer <token>` |
 
 ---
 
 ### `GET /generations/{id}`
 
-Get the status and details of a specific generation. Used for polling during AI processing.
+Get status and details of a specific generation. Used for polling.
 
-| Field        | Value                          |
-|--------------|--------------------------------|
-| Auth         | Yes — `Bearer <token>` header  |
-| Request Body | None                           |
+| Status | Meaning |
+|--------|---------|
+| `pending` | Job created, not yet started |
+| `processing` | AI pipeline running |
+| `completed` | All headshots generated |
+| `failed` | Generation error |
 
-**Response:**
-
-```json
-{
-  "id": "uuid",
-  "status": "completed",
-  "style": "corporate",
-  "presentation": "masculine",
-  "created_at": "2026-03-20T12:01:00Z",
-  "completed_at": "2026-03-20T12:04:30Z"
-}
-```
-
-**Possible `status` values:**
-
-| Status        | Meaning                              |
-|---------------|--------------------------------------|
-| `pending`     | Job created, not yet started         |
-| `processing`  | AI pipeline is running               |
-| `completed`   | All headshots generated successfully |
-| `failed`      | Generation encountered an error      |
-
-The client polls this endpoint every 5 seconds (max 120 attempts / 10 minutes) until the status is terminal (`completed` or `failed`).
+Client polls every 5 seconds (max 120 attempts / 10 minutes).
 
 ---
 
 ### `GET /generations/{id}/images`
 
-Retrieve the generated headshot images for a completed generation.
+Retrieve generated headshot images for a completed generation.
 
-| Field        | Value                          |
-|--------------|--------------------------------|
-| Auth         | Yes — `Bearer <token>` header  |
-| Request Body | None                           |
+---
 
-**Response:**
+### `GET /generations/status`
 
-```json
-{
-  "generation_id": "uuid",
-  "images": [
-    {
-      "id": "uuid",
-      "url": "https://blob.studioface.app/...",
-      "style": "corporate",
-      "created_at": "2026-03-20T12:04:30Z"
-    }
-  ]
-}
-```
+Get generation status (query parameter `?id=...`).
+
+---
+
+### `GET /generations/history`
+
+Get generation history for the authenticated user.
+
+---
+
+### `GET /generations/download`
+
+Download generated images (query parameter `?id=...`).
+
+---
+
+### `DELETE /generations/{id}`
+
+Delete a generation.
+
+| Field | Value |
+|-------|-------|
+| Auth  | Yes — `Bearer <token>` |
 
 ---
 
 ## Payments
 
-### `POST /checkout/`
+### `POST /payments/create-checkout`
 
-Create a Stripe checkout session for a generation. Returns the Stripe-hosted payment URL.
+Create a Stripe checkout session. Returns the Stripe-hosted payment URL.
 
-| Field        | Value                          |
-|--------------|--------------------------------|
-| Auth         | Yes — `Bearer <token>` header  |
-| Content-Type | application/json               |
+| Field | Value |
+|-------|-------|
+| Auth  | Yes — `Bearer <token>` |
 
-**Request Body:**
-
-```json
-{
-  "generation_id": "uuid"
-}
-```
+**Request:** `{"generation_id": "uuid"}`
 
 **Response:**
 
@@ -368,29 +242,64 @@ Create a Stripe checkout session for a generation. Returns the Stripe-hosted pay
 }
 ```
 
-The client opens `checkout_url` in the browser. After successful payment, Stripe redirects the user to `/payment/success`.
+Client opens `checkout_url` in the browser. After payment, Stripe redirects to `/payment/success`.
+
+---
+
+### `GET /payments/plans`
+
+List available payment plans.
+
+### `GET /payments/products`
+
+List available products.
+
+### `GET /payments/prices`
+
+List prices.
+
+### `GET /payments/credits`
+
+Get user's credit balance.
+
+### `GET /payments/history`
+
+Get payment history.
+
+### `GET /payments/portal`
+
+Get Stripe customer portal URL.
+
+### `POST /payments/webhook`
+
+Stripe webhook endpoint. Validates `stripe-signature` header.
 
 ---
 
 ## Error Codes
 
-All `4xx` and `5xx` responses include a `detail` field. The Flet client maps these to structured errors:
-
-| HTTP Status | Meaning                     |
-|-------------|-----------------------------|
-| 400         | Bad request / validation     |
-| 401         | Not authenticated            |
-| 403         | Forbidden                    |
-| 404         | Resource not found           |
-| 409         | Conflict (duplicate)         |
-| 422         | Validation error             |
-| 429         | Rate limited                 |
-| 500         | Internal server error        |
+| HTTP Status | Meaning |
+|-------------|---------|
+| 400 | Bad request / validation |
+| 401 | Not authenticated |
+| 403 | Forbidden |
+| 404 | Resource not found |
+| 409 | Conflict (duplicate) |
+| 422 | Validation error (Pydantic) |
+| 429 | Rate limited |
+| 500 | Internal server error |
 | 502/503/504 | Gateway error (auto-retried) |
 
 The client automatically retries on `502`, `503`, and `504` with exponential backoff (up to 3 attempts).
 
 ---
+
+## Security Headers
+
+The API returns strong security headers:
+- `Strict-Transport-Security` (HSTS)
+- `X-Frame-Options`
+- Content Security Policy permissions
 
 ## Authentication Header
 
@@ -400,4 +309,10 @@ All authenticated endpoints require:
 Authorization: Bearer <token>
 ```
 
-The token is obtained via magic-link verification (`POST /auth/verify`) and stored in the browser's `client_storage` for session persistence across page reloads.
+Token is obtained via magic-link verification (`POST /auth/magic-link/verify`) and stored in the session store.
+
+## Notes
+
+- **Google OAuth** is **not configured** on the backend (client_id is a placeholder)
+- **No public API docs** — `/docs`, `/openapi.json`, `/schema/` all return 404
+- **No separate upload endpoints** — file uploads are handled within the generations flow
