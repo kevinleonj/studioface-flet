@@ -278,8 +278,24 @@ def build(page: ft.Page) -> list[ft.Control]:
                 print(f"[CAM]   initialize() completed OK", flush=True)
 
                 state["camera_ready"] = True
-                print("[CAM]   calling _rebuild_step() to show capture/flip buttons", flush=True)
-                _rebuild_step()
+                # DO NOT call _rebuild_step() here — it would destroy the camera
+                # control and replace it with a new one, killing the live preview.
+                # Instead, update button visibility directly via refs + page.update().
+                print(f"[CAM]   updating via refs: status={camera_status_ref.current is not None} container={camera_container_ref.current is not None} flip={flip_btn_ref.current is not None} capture={capture_btn_ref.current is not None}", flush=True)
+                if camera_status_ref.current:
+                    camera_status_ref.current.visible = False
+                if camera_container_ref.current:
+                    camera_container_ref.current.visible = True
+                else:
+                    print("[CAM]   WARNING: camera_container_ref is None!", flush=True)
+                if flip_btn_ref.current:
+                    flip_btn_ref.current.visible = len(cams) > 1
+                if capture_btn_ref.current:
+                    capture_btn_ref.current.disabled = False
+                    capture_btn_ref.current.visible = True
+                else:
+                    print("[CAM]   WARNING: capture_btn_ref is None!", flush=True)
+                page.update()
                 print("[CAM]   camera is live with buttons", flush=True)
 
             except Exception as ex:
@@ -486,6 +502,70 @@ def build(page: ft.Page) -> list[ft.Control]:
 
         page.run_task(do_generate)
 
+    # --- Persistent camera UI controls (survive _rebuild_step) ---
+    # These are created ONCE and reused across rebuilds. The camera_preview
+    # object must stay the same Python object so Flutter keeps the live feed.
+    _cam_status = ft.Text(
+        ref=camera_status_ref,
+        value=t("create.camera_initializing", lang),
+        size=T.FONT_BODY,
+        color=T.TEXT_SECONDARY,
+        visible=False,
+    )
+    _cam_box = ft.Container(
+        ref=camera_container_ref,
+        content=camera_preview if camera_preview else ft.Container(),
+        width=min(400, page_width - 2 * h_pad),
+        height=300,
+        border_radius=T.RADIUS_MD,
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        bgcolor=T.BG_SURFACE_HIGH,
+        visible=False,
+    )
+    _cam_flip = ft.OutlinedButton(
+        t("create.flip_camera", lang),
+        ref=flip_btn_ref,
+        icon=ft.Icons.FLIP_CAMERA_ANDROID,
+        style=ft.ButtonStyle(
+            color=T.TEXT_SECONDARY,
+            side=ft.BorderSide(1, T.OUTLINE),
+            shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
+        ),
+        on_click=on_flip_camera,
+        visible=False,
+    )
+    _cam_capture = ft.ElevatedButton(
+        t("create.capture", lang),
+        ref=capture_btn_ref,
+        icon=ft.Icons.CAMERA,
+        bgcolor=T.BUTTON_PRIMARY_BG,
+        color=T.BUTTON_TEXT,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
+            padding=ft.padding.symmetric(horizontal=T.SPACE_LG, vertical=T.SPACE_MD),
+        ),
+        on_click=on_capture,
+        visible=False,
+    )
+    _cam_zone = ft.Container(
+        content=ft.Column(
+            controls=[_cam_box, _cam_status, ft.Row(
+                controls=[_cam_flip, _cam_capture],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=T.SPACE_MD,
+            )],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=T.SPACE_MD,
+        ),
+        width=min(500, page_width - 2 * h_pad),
+        padding=ft.padding.all(T.SPACE_XXL),
+        border=ft.border.all(2, T.OUTLINE),
+        border_radius=T.RADIUS_LG,
+        alignment=ft.Alignment.CENTER,
+        bgcolor=T.BG_SURFACE,
+        visible=False,  # shown when camera mode selected
+    )
+
     # --- Step builders ---
     def _build_step1() -> ft.Control:
         """Upload selfies step with file upload + camera toggle."""
@@ -585,85 +665,12 @@ def build(page: ft.Page) -> list[ft.Control]:
             visible=(upload_mode == "files"),
         )
 
-        # --- Camera zone ---
-        # The Camera control MUST be in the control tree always (even hidden)
-        # so it renders in the browser before we can call get_available_cameras().
-        camera_zone_controls: list[ft.Control] = []
-        if HAS_CAMERA and camera_preview:
-            camera_zone_controls = [
-                # Camera preview — always in tree, visibility controlled by camera_preview.visible
-                ft.Container(
-                    ref=camera_container_ref,
-                    content=camera_preview,
-                    width=min(400, page_width - 2 * h_pad),
-                    height=300,
-                    border_radius=T.RADIUS_MD,
-                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-                    bgcolor=T.BG_SURFACE_HIGH,
-                    visible=state["camera_ready"],
-                ),
-                # Status text (shown while initializing)
-                ft.Text(
-                    ref=camera_status_ref,
-                    value=t("create.camera_initializing", lang),
-                    size=T.FONT_BODY,
-                    color=T.TEXT_SECONDARY,
-                    visible=(upload_mode == "camera" and not state["camera_ready"]),
-                ),
-                # Camera action buttons
-                ft.Row(
-                    controls=[
-                        ft.OutlinedButton(
-                            t("create.flip_camera", lang),
-                            ref=flip_btn_ref,
-                            icon=ft.Icons.FLIP_CAMERA_ANDROID,
-                            style=ft.ButtonStyle(
-                                color=T.TEXT_SECONDARY,
-                                side=ft.BorderSide(1, T.OUTLINE),
-                                shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
-                            ),
-                            on_click=on_flip_camera,
-                            visible=(state["camera_ready"] and len(state["cameras"]) > 1),
-                        ),
-                        ft.ElevatedButton(
-                            t("create.capture", lang),
-                            ref=capture_btn_ref,
-                            icon=ft.Icons.CAMERA,
-                            bgcolor=T.BUTTON_PRIMARY_BG,
-                            color=T.BUTTON_TEXT,
-                            style=ft.ButtonStyle(
-                                shape=ft.RoundedRectangleBorder(radius=T.RADIUS_SM),
-                                padding=ft.padding.symmetric(
-                                    horizontal=T.SPACE_LG, vertical=T.SPACE_MD
-                                ),
-                            ),
-                            on_click=on_capture,
-                            disabled=(not state["camera_ready"]),
-                            visible=state["camera_ready"],
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=T.SPACE_MD,
-                    visible=state["camera_ready"],
-                ),
-            ]
+        # --- Camera zone (persistent — never recreated) ---
+        # Use the persistent _cam_zone created above build_step1.
+        # Just update its visibility based on current mode.
+        _cam_zone.visible = (upload_mode == "camera")
 
-        camera_zone = ft.Container(
-            content=ft.Column(
-                controls=camera_zone_controls,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=T.SPACE_MD,
-            ),
-            width=min(500, page_width - 2 * h_pad),
-            padding=ft.padding.all(T.SPACE_XXL),
-            border=ft.border.all(2, T.OUTLINE),
-            border_radius=T.RADIUS_LG,
-            alignment=ft.Alignment.CENTER,
-            bgcolor=T.BG_SURFACE,
-            visible=(upload_mode == "camera"),
-        )
-
-        controls: list[ft.Control] = [mode_toggle, upload_zone, camera_zone]
+        controls: list[ft.Control] = [mode_toggle, upload_zone, _cam_zone]
 
         if selected_files:
             file_chips: list[ft.Control] = []
